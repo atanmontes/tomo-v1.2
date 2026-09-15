@@ -37,10 +37,11 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
   int currentPage = 0;
   bool uiVisible = true;
   ReaderMode mode = ReaderMode.paged;
+  bool _restoring = false;
 
   late ChapterItem activeChapter;
-  late final PageController pageController;
-  final ScrollController webtoonController = ScrollController();
+  PageController pageController = PageController();
+  ScrollController webtoonController = ScrollController();
 
   Timer? _saveTimer;
   Timer? _hideTimer;
@@ -50,7 +51,7 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
   void initState() {
     super.initState();
     activeChapter = widget.chapter;
-    pageController = PageController();
+    webtoonController.addListener(_onWebtoonScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _loadProgressAndChapter();
@@ -62,10 +63,15 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
   void dispose() {
     _saveTimer?.cancel();
     _hideTimer?.cancel();
+    webtoonController.removeListener(_onWebtoonScroll);
     pageController.dispose();
     webtoonController.dispose();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
+  }
+
+  double _pageExtent(BuildContext context) {
+    return MediaQuery.sizeOf(context).width * 1.4;
   }
 
   void _armHideTimer() {
@@ -89,7 +95,6 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
   Future<void> _loadProgressAndChapter() async {
     final store = LibraryScope.read(context);
     final savedPage = await store.pageFor(widget.manga.id, activeChapter.id);
-
     if (!mounted) return;
 
     setState(() {
@@ -103,7 +108,7 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
 
   void _scheduleSaveProgress() {
     _saveTimer?.cancel();
-    _saveTimer = Timer(const Duration(milliseconds: 250), _saveProgressNow);
+    _saveTimer = Timer(const Duration(milliseconds: 350), _saveProgressNow);
   }
 
   Future<void> _saveProgressNow() async {
@@ -142,7 +147,6 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
       }
 
       final safePage = initialPage.clamp(0, foundImages.length - 1);
-
       if (!mounted) return;
 
       setState(() {
@@ -154,9 +158,7 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        if (mode == ReaderMode.paged && pageController.hasClients) {
-          pageController.jumpToPage(safePage);
-        }
+        _restorePosition(safePage);
         _precacheNearbyPages(safePage);
       });
     } catch (e) {
@@ -168,13 +170,63 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
     }
   }
 
+  void _restorePosition(int page) {
+    _restoring = true;
+    if (mode == ReaderMode.paged) {
+      if (pageController.hasClients) {
+        pageController.jumpToPage(page);
+      }
+    } else if (webtoonController.hasClients) {
+      final offset = page * _pageExtent(context);
+      final max = webtoonController.position.maxScrollExtent;
+      webtoonController.jumpTo(offset.clamp(0, max));
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _restoring = false;
+    });
+  }
+
+  void _switchMode() {
+    final page = currentPage;
+    setState(() {
+      mode = mode == ReaderMode.paged ? ReaderMode.webtoon : ReaderMode.paged;
+      uiVisible = true;
+    });
+    _armHideTimer();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _restorePosition(page);
+    });
+  }
+
+  void _onWebtoonScroll() {
+    if (_restoring || mode != ReaderMode.webtoon || images.isEmpty) return;
+    if (!webtoonController.hasClients) return;
+
+    final extent = _pageExtent(context);
+    if (extent <= 0) return;
+
+    final page = (webtoonController.offset / extent)
+        .floor()
+        .clamp(0, images.length - 1);
+
+    if (page == currentPage) return;
+
+    currentPage = page;
+    _scheduleSaveProgress();
+    _precacheNearbyPages(page);
+
+    if (page >= images.length - 1) {
+      _markChapterAsRead(activeChapter.id);
+    }
+  }
+
   void _precacheNearbyPages(int page) {
     if (!mounted || images.isEmpty) return;
 
     final screenWidth = MediaQuery.sizeOf(context).width;
     final pixelRatio = MediaQuery.devicePixelRatioOf(context);
     final cacheWidth = (screenWidth * pixelRatio * 1.25).round();
-
     final candidates = <int>{page + 1, page + 2, if (page > 0) page - 1};
 
     for (final index in candidates) {
@@ -193,12 +245,6 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
     return widget.chapters.indexWhere(
       (chapter) => chapter.id == activeChapter.id,
     );
-  }
-
-  ChapterItem? get _previousChapter {
-    final index = _activeChapterIndex;
-    if (index <= 0) return null;
-    return widget.chapters[index - 1];
   }
 
   ChapterItem? get _nextChapter {
@@ -232,38 +278,37 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
     await loadImages(initialPage: savedPage);
   }
 
-  Future<void> _goToPrevious() async {
-    if (mode == ReaderMode.paged && currentPage > 0) {
-      pageController.previousPage(
-        duration: const Duration(milliseconds: 140),
-        curve: Curves.easeOut,
-      );
-      return;
-    }
-    final chapter = _previousChapter;
-    if (chapter != null) await _openChapter(chapter);
+  Future<void> _goToPreviousPage() async {
+    if (mode != ReaderMode.paged || currentPage <= 0) return;
+    if (!pageController.hasClients) return;
+    pageController.previousPage(
+      duration: const Duration(milliseconds: 140),
+      curve: Curves.easeOut,
+    );
   }
 
-  Future<void> _goToNext() async {
-    if (mode == ReaderMode.paged && currentPage < images.length - 1) {
-      pageController.nextPage(
-        duration: const Duration(milliseconds: 140),
-        curve: Curves.easeOut,
-      );
-      return;
-    }
-    if (_nextChapter != null) {
-      await _markChapterAsRead(activeChapter.id);
-      await _openChapter(_nextChapter!);
-    }
+  Future<void> _goToNextPage() async {
+    if (mode != ReaderMode.paged || currentPage >= images.length - 1) return;
+    if (!pageController.hasClients) return;
+    pageController.nextPage(
+      duration: const Duration(milliseconds: 140),
+      curve: Curves.easeOut,
+    );
   }
 
-  void _onTapAt(Offset local, Size size) {
+  Future<void> _goToNextChapter() async {
+    final chapter = _nextChapter;
+    if (chapter == null) return;
+    await _markChapterAsRead(activeChapter.id);
+    await _openChapter(chapter);
+  }
+
+  void _onPagedTap(Offset local, Size size) {
     final x = local.dx / size.width;
     if (x < 0.28) {
-      _goToPrevious();
+      _goToPreviousPage();
     } else if (x > 0.72) {
-      _goToNext();
+      _goToNextPage();
     } else {
       _toggleUi();
     }
@@ -314,28 +359,12 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
                   tooltip: mode == ReaderMode.paged
                       ? 'Webtoon mode'
                       : 'Page mode',
-                  onPressed: () {
-                    setState(() {
-                      mode = mode == ReaderMode.paged
-                          ? ReaderMode.webtoon
-                          : ReaderMode.paged;
-                      uiVisible = true;
-                    });
-                    _armHideTimer();
-                  },
+                  onPressed: _switchMode,
                   icon: Icon(
                     mode == ReaderMode.paged
                         ? Icons.view_day_outlined
                         : Icons.auto_stories_outlined,
                   ),
-                ),
-                IconButton(
-                  onPressed: () {
-                    _saveProgressNow();
-                    Navigator.pop(context);
-                  },
-                  tooltip: 'Back to chapters',
-                  icon: const Icon(Icons.list_alt_outlined),
                 ),
               ],
             )
@@ -361,16 +390,17 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
                         mode == ReaderMode.paged
                             ? _buildPageMode()
                             : _buildWebtoonMode(),
-                        if (uiVisible)
+                        if (uiVisible && mode == ReaderMode.paged)
                           Positioned(
                             left: 16,
                             right: 16,
                             bottom: 24,
-                            child: _ReaderHud(
+                            child: _PagedFooter(
                               pageText:
                                   'Page ${currentPage + 1} of ${images.length}',
-                              onPrevious: _goToPrevious,
-                              onNext: _goToNext,
+                              showNext: currentPage == images.length - 1 &&
+                                  _nextChapter != null,
+                              onNext: _goToNextChapter,
                             ),
                           ),
                       ],
@@ -402,132 +432,220 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
         return GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTapUp: (details) {
-            _onTapAt(details.localPosition, MediaQuery.sizeOf(context));
+            _onPagedTap(details.localPosition, MediaQuery.sizeOf(context));
           },
           child: InteractiveViewer(
-          minScale: 1,
-          maxScale: 4,
-          child: Center(
-            child: Image.network(
-              images[index],
-              fit: BoxFit.contain,
-              width: double.infinity,
-              height: double.infinity,
-              cacheWidth: cacheWidth,
-              filterQuality: FilterQuality.medium,
-              gaplessPlayback: true,
-              headers: weebCentralImageHeaders,
-              frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
-                if (wasSynchronouslyLoaded || frame != null) return child;
-                return const Center(
-                  child: CircularProgressIndicator(color: tomoPink),
-                );
-              },
-              errorBuilder: (_, __, ___) {
-                return const Center(
-                  child: Icon(
-                    Icons.broken_image_outlined,
-                    color: Colors.white24,
-                    size: 50,
-                  ),
-                );
-              },
+            minScale: 1,
+            maxScale: 4,
+            child: Center(
+              child: Image.network(
+                images[index],
+                fit: BoxFit.contain,
+                width: double.infinity,
+                height: double.infinity,
+                cacheWidth: cacheWidth,
+                filterQuality: FilterQuality.medium,
+                gaplessPlayback: true,
+                headers: weebCentralImageHeaders,
+                frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+                  if (wasSynchronouslyLoaded || frame != null) return child;
+                  return const Center(
+                    child: CircularProgressIndicator(color: tomoPink),
+                  );
+                },
+                errorBuilder: (_, __, ___) {
+                  return const Center(
+                    child: Icon(
+                      Icons.broken_image_outlined,
+                      color: Colors.white24,
+                      size: 50,
+                    ),
+                  );
+                },
+              ),
             ),
           ),
-        ),
         );
       },
     );
   }
 
   Widget _buildWebtoonMode() {
+    final next = _nextChapter;
+    final minHeight = _pageExtent(context);
+
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTapUp: (details) {
-        _onTapAt(details.localPosition, MediaQuery.sizeOf(context));
-      },
+      onTap: _toggleUi,
       child: ListView.builder(
-      controller: webtoonController,
-      itemCount: images.length,
-      itemBuilder: (context, index) {
-        if ((index - currentPage).abs() <= 1) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (!mounted) return;
-            if (currentPage != index) {
-              currentPage = index;
-              _scheduleSaveProgress();
-              _precacheNearbyPages(index);
-            }
-          });
-        }
-
-        return Image.network(
-          images[index],
-          fit: BoxFit.fitWidth,
-          width: double.infinity,
-          filterQuality: FilterQuality.medium,
-          gaplessPlayback: true,
-          headers: weebCentralImageHeaders,
-          loadingBuilder: (context, child, progress) {
-            if (progress == null) return child;
-            return const SizedBox(
-              height: 240,
-              child: Center(
-                child: CircularProgressIndicator(color: tomoPink),
-              ),
+        controller: webtoonController,
+        cacheExtent: minHeight * 4,
+        itemCount: images.length + 1,
+        itemBuilder: (context, index) {
+          if (index == images.length) {
+            return _WebtoonChapterFooter(
+              hasNext: next != null,
+              nextTitle: next?.title,
+              onNext: next == null ? null : _goToNextChapter,
             );
-          },
-        );
-      },
-    ),
+          }
+
+          return _WebtoonImage(
+            url: images[index],
+            minHeight: minHeight,
+          );
+        },
+      ),
     );
   }
 }
 
-class _ReaderHud extends StatelessWidget {
-  final String pageText;
-  final VoidCallback onPrevious;
-  final VoidCallback onNext;
+class _WebtoonImage extends StatelessWidget {
+  final String url;
+  final double minHeight;
 
-  const _ReaderHud({
-    required this.pageText,
-    required this.onPrevious,
+  const _WebtoonImage({
+    required this.url,
+    required this.minHeight,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ConstrainedBox(
+      constraints: BoxConstraints(minHeight: minHeight),
+      child: Image.network(
+        url,
+        fit: BoxFit.fitWidth,
+        width: double.infinity,
+        filterQuality: FilterQuality.medium,
+        gaplessPlayback: true,
+        headers: weebCentralImageHeaders,
+        loadingBuilder: (context, child, progress) {
+          if (progress == null) return child;
+          return SizedBox(
+            height: minHeight,
+            child: const Center(
+              child: CircularProgressIndicator(color: tomoPink),
+            ),
+          );
+        },
+        errorBuilder: (_, __, ___) {
+          return SizedBox(
+            height: minHeight,
+            child: const Center(
+              child: Icon(
+                Icons.broken_image_outlined,
+                color: Colors.white24,
+                size: 42,
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _WebtoonChapterFooter extends StatelessWidget {
+  final bool hasNext;
+  final String? nextTitle;
+  final VoidCallback? onNext;
+
+  const _WebtoonChapterFooter({
+    required this.hasNext,
+    required this.nextTitle,
     required this.onNext,
   });
 
   @override
   Widget build(BuildContext context) {
-    return IgnorePointer(
-      ignoring: false,
-      child: Material(
-        color: Colors.black.withOpacity(0.55),
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          child: Row(
-            children: [
-              IconButton(
-                onPressed: onPrevious,
-                icon: const Icon(Icons.chevron_left_rounded, color: tomoPink),
-              ),
-              Expanded(
-                child: Text(
-                  pageText,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    color: tomoPink,
-                  ),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 28, 20, 48),
+      child: Column(
+        children: [
+          const Text(
+            'End of chapter',
+            style: TextStyle(
+              color: Colors.white54,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 14),
+          if (hasNext)
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: FilledButton.icon(
+                onPressed: onNext,
+                style: FilledButton.styleFrom(backgroundColor: tomoPink),
+                icon: const Icon(Icons.skip_next_rounded),
+                label: Text(
+                  nextTitle == null || nextTitle!.isEmpty
+                      ? 'Next chapter'
+                      : 'Next — $nextTitle',
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
-              IconButton(
-                onPressed: onNext,
-                icon: const Icon(Icons.chevron_right_rounded, color: tomoPink),
+            )
+          else
+            const Text(
+              'No more chapters.',
+              style: TextStyle(color: Colors.white38),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PagedFooter extends StatelessWidget {
+  final String pageText;
+  final bool showNext;
+  final VoidCallback onNext;
+
+  const _PagedFooter({
+    required this.pageText,
+    required this.showNext,
+    required this.onNext,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Material(
+          color: Colors.black.withOpacity(0.55),
+          borderRadius: BorderRadius.circular(14),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Text(
+              pageText,
+              style: const TextStyle(
+                fontWeight: FontWeight.w700,
+                color: tomoPink,
               ),
-            ],
+            ),
           ),
         ),
-      ),
+        const Spacer(),
+        if (showNext)
+          FilledButton(
+            onPressed: onNext,
+            style: FilledButton.styleFrom(
+              backgroundColor: tomoPink,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+            ),
+            child: const Text(
+              'Next',
+              style: TextStyle(fontWeight: FontWeight.w800),
+            ),
+          ),
+      ],
     );
   }
 }

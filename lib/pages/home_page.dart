@@ -51,7 +51,9 @@ class _HomePageState extends State<HomePage> {
         decoration: BoxDecoration(
           color: tomoElevated,
           border: Border(
-            top: BorderSide(color: Colors.white.withOpacity(0.06)),
+            top: BorderSide(
+              color: Colors.white.withOpacity(0.06),
+            ),
           ),
         ),
         child: NavigationBar(
@@ -64,12 +66,18 @@ class _HomePageState extends State<HomePage> {
           destinations: const [
             NavigationDestination(
               icon: Icon(Icons.home_outlined),
-              selectedIcon: Icon(Icons.home_rounded, color: tomoPink),
+              selectedIcon: Icon(
+                Icons.home_rounded,
+                color: tomoPink,
+              ),
               label: 'Home',
             ),
             NavigationDestination(
               icon: Icon(Icons.collections_bookmark_outlined),
-              selectedIcon: Icon(Icons.collections_bookmark_rounded, color: tomoPink),
+              selectedIcon: Icon(
+                Icons.collections_bookmark_rounded,
+                color: tomoPink,
+              ),
               label: 'Library',
             ),
           ],
@@ -110,9 +118,12 @@ class _HomeContentState extends State<_HomeContent> {
   @override
   void initState() {
     super.initState();
+
     _loadLatest();
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+
       LibraryScope.read(context).checkLibraryUpdates();
     });
   }
@@ -272,6 +283,7 @@ class _HomeContentState extends State<_HomeContent> {
     });
 
     _searchDebounce?.cancel();
+
     await _searchManga(search.trim());
   }
 
@@ -284,11 +296,18 @@ class _HomeContentState extends State<_HomeContent> {
   }
 
   Future<void> _openManga(MangaItem manga) async {
-    await openMangaOrContinue(context, manga);
+    await openMangaOrContinue(
+      context,
+      manga,
+    );
   }
 
   Future<void> _continueManga(MangaItem manga) async {
-    await openMangaOrContinue(context, manga, preferContinue: true);
+    await openMangaOrContinue(
+      context,
+      manga,
+      preferContinue: true,
+    );
   }
 
   Future<void> _clearSearch() async {
@@ -317,7 +336,8 @@ class _HomeContentState extends State<_HomeContent> {
 
   @override
   Widget build(BuildContext context) {
-    final hasSearch = search.trim().isNotEmpty || _searchFilters.hasFilters;
+    final hasSearch =
+        search.trim().isNotEmpty || _searchFilters.hasFilters;
 
     return SafeArea(
       child: Padding(
@@ -326,6 +346,7 @@ class _HomeContentState extends State<_HomeContent> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: 4),
+
             RichText(
               text: const TextSpan(
                 style: TextStyle(fontSize: 36),
@@ -349,6 +370,7 @@ class _HomeContentState extends State<_HomeContent> {
                 ],
               ),
             ),
+
             const Text(
               'Find your next manga',
               style: TextStyle(
@@ -357,7 +379,9 @@ class _HomeContentState extends State<_HomeContent> {
                 letterSpacing: 0.2,
               ),
             ),
+
             const SizedBox(height: 18),
+
             Row(
               children: [
                 Expanded(
@@ -411,7 +435,9 @@ class _HomeContentState extends State<_HomeContent> {
                     ),
                   ),
                 ),
+
                 const SizedBox(width: 8),
+
                 Material(
                   color: tomoCard,
                   borderRadius: BorderRadius.circular(18),
@@ -432,7 +458,9 @@ class _HomeContentState extends State<_HomeContent> {
                 ),
               ],
             ),
+
             const SizedBox(height: 18),
+
             Expanded(
               child: searching
                   ? const Center(
@@ -455,8 +483,7 @@ class _HomeContentState extends State<_HomeContent> {
                               padding: const EdgeInsets.only(
                                 bottom: 24,
                               ),
-                              itemCount:
-                                  searchResults.length +
+                              itemCount: searchResults.length +
                                   (hasMoreResults ? 1 : 0),
                               separatorBuilder: (_, index) {
                                 if (index >= searchResults.length) {
@@ -475,14 +502,17 @@ class _HomeContentState extends State<_HomeContent> {
                                     child: Center(
                                       child: Material(
                                         color: tomoCard,
-                                        borderRadius: BorderRadius.circular(18),
+                                        borderRadius:
+                                            BorderRadius.circular(18),
                                         child: InkWell(
                                           onTap: loadingMore
                                               ? null
                                               : _loadMoreResults,
-                                          borderRadius: BorderRadius.circular(14),
+                                          borderRadius:
+                                              BorderRadius.circular(14),
                                           child: Padding(
-                                            padding: const EdgeInsets.symmetric(
+                                            padding:
+                                                const EdgeInsets.symmetric(
                                               horizontal: 28,
                                               vertical: 13,
                                             ),
@@ -490,7 +520,8 @@ class _HomeContentState extends State<_HomeContent> {
                                                 ? const SizedBox(
                                                     width: 22,
                                                     height: 22,
-                                                    child: CircularProgressIndicator(
+                                                    child:
+                                                        CircularProgressIndicator(
                                                       strokeWidth: 2.2,
                                                       color: tomoPink,
                                                     ),
@@ -498,7 +529,8 @@ class _HomeContentState extends State<_HomeContent> {
                                                 : const Text(
                                                     'Load More',
                                                     style: TextStyle(
-                                                      fontWeight: FontWeight.w700,
+                                                      fontWeight:
+                                                          FontWeight.w700,
                                                       color: Colors.white,
                                                     ),
                                                   ),
@@ -511,13 +543,17 @@ class _HomeContentState extends State<_HomeContent> {
 
                                 final manga = searchResults[index];
 
+                                // Search keeps the original list layout.
                                 return RepaintBoundary(
                                   child: MangaCard(
                                     manga: manga,
                                     onTap: () => _openManga(manga),
-                                    isInLibrary: _isInLibrary(manga),
+                                    isInLibrary:
+                                        _isInLibrary(manga),
                                     libraryBusy:
-                                        LibraryScope.of(context).busyIds.contains(manga.id),
+                                        LibraryScope.of(context)
+                                            .busyIds
+                                            .contains(manga.id),
                                     onLibraryToggle: () {
                                       _toggleLibrary(manga);
                                     },
@@ -527,11 +563,11 @@ class _HomeContentState extends State<_HomeContent> {
                               },
                             )
                       : _HomeContentSections(
-                            latestManga: latestManga,
-                            loadingLatest: loadingLatest,
-                            onOpen: _openManga,
-                            onContinue: _continueManga,
-                            onLibraryToggle: _toggleLibrary,
+                          latestManga: latestManga,
+                          loadingLatest: loadingLatest,
+                          onOpen: _openManga,
+                          onContinue: _continueManga,
+                          onLibraryToggle: _toggleLibrary,
                         ),
             ),
           ],
@@ -559,10 +595,13 @@ class _HomeContentSections extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final store = LibraryScope.of(context);
+
     final continueReading = store.items
-    .where((manga) => store.readCountFor(manga.id) > 0)
-    .take(6)
-    .toList();
+        .where(
+          (manga) => store.readCountFor(manga.id) > 0,
+        )
+        .take(6)
+        .toList();
 
     return ListView(
       padding: const EdgeInsets.only(bottom: 24),
@@ -572,13 +611,16 @@ class _HomeContentSections extends StatelessWidget {
             title: 'Continue Reading',
             icon: Icons.menu_book_rounded,
           ),
+
           const SizedBox(height: 10),
+
           SizedBox(
             height: 210,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               itemCount: continueReading.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 12),
+              separatorBuilder: (_, __) =>
+                  const SizedBox(width: 12),
               itemBuilder: (_, index) {
                 final manga = continueReading[index];
 
@@ -590,13 +632,17 @@ class _HomeContentSections extends StatelessWidget {
               },
             ),
           ),
-          const SizedBox(height: 24),
+
+          const SizedBox(height: 26),
         ],
+
         const _SectionTitle(
           title: 'Latest Updates',
           icon: Icons.update_rounded,
         ),
+
         const SizedBox(height: 10),
+
         if (loadingLatest)
           const SizedBox(
             height: 150,
@@ -611,24 +657,40 @@ class _HomeContentSections extends StatelessWidget {
             padding: EdgeInsets.symmetric(vertical: 40),
             child: Text(
               'No updates available right now.',
-              style: TextStyle(color: Colors.white54),
+              style: TextStyle(
+                color: Colors.white54,
+              ),
             ),
           )
         else
-          ...latestManga.map(
-            (manga) => Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: RepaintBoundary(
-                child: MangaCard(
-                  manga: manga,
-                  onTap: () => onOpen(manga),
-                  isInLibrary: store.isInLibrary(manga.id),
-                  libraryBusy: store.busyIds.contains(manga.id),
-                  onLibraryToggle: () => onLibraryToggle(manga),
-                  showAuthor: false,
-                ),
-              ),
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: latestManga.length,
+            gridDelegate:
+                const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 3,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 18,
+              mainAxisExtent: 215,
             ),
+            itemBuilder: (context, index) {
+              final manga = latestManga[index];
+
+              return RepaintBoundary(
+                child: _HomeLatestTile(
+                  manga: manga,
+                  hasUpdate: store.hasUpdate(manga.id),
+                  isInLibrary:
+                      store.isInLibrary(manga.id),
+                  libraryBusy:
+                      store.busyIds.contains(manga.id),
+                  onTap: () => onOpen(manga),
+                  onLibraryToggle: () =>
+                      onLibraryToggle(manga),
+                ),
+              );
+            },
           ),
       ],
     );
@@ -656,9 +718,17 @@ class _SectionTitle extends StatelessWidget {
             borderRadius: BorderRadius.circular(99),
           ),
         ),
+
         const SizedBox(width: 10),
-        Icon(icon, color: tomoPink, size: 18),
+
+        Icon(
+          icon,
+          color: tomoPink,
+          size: 18,
+        ),
+
         const SizedBox(width: 6),
+
         Text(
           title,
           style: const TextStyle(
@@ -668,6 +738,139 @@ class _SectionTitle extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _HomeLatestTile extends StatelessWidget {
+  final MangaItem manga;
+  final bool hasUpdate;
+  final bool isInLibrary;
+  final bool libraryBusy;
+  final VoidCallback onTap;
+  final VoidCallback onLibraryToggle;
+
+  const _HomeLatestTile({
+    required this.manga,
+    required this.hasUpdate,
+    required this.isInLibrary,
+    required this.libraryBusy,
+    required this.onTap,
+    required this.onLibraryToggle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(5),
+                    child: manga.cover.isEmpty
+                        ? Container(
+                            color: tomoCard,
+                            child: const Icon(
+                              Icons.menu_book_rounded,
+                              color: Colors.white24,
+                              size: 34,
+                            ),
+                          )
+                        : TomoNetworkImage(
+                            url: manga.cover,
+                            fit: BoxFit.cover,
+                            width: 400,
+                            height: 600,
+                            cacheWidth: 360,
+                          ),
+                  ),
+                ),
+
+                if (hasUpdate)
+                  Positioned(
+                    top: 6,
+                    right: 6,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: tomoPink,
+                        borderRadius: BorderRadius.circular(5),
+                      ),
+                      child: const Text(
+                        'NEW',
+                        style: TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ),
+
+                Positioned(
+                  left: 6,
+                  bottom: 6,
+                  child: Material(
+                    color: Colors.black.withOpacity(0.72),
+                    shape: const CircleBorder(),
+                    child: InkWell(
+                      onTap: libraryBusy
+                          ? null
+                          : onLibraryToggle,
+                      customBorder: const CircleBorder(),
+                      child: SizedBox(
+                        width: 32,
+                        height: 32,
+                        child: libraryBusy
+                            ? const Padding(
+                                padding: EdgeInsets.all(8),
+                                child:
+                                    CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: tomoPink,
+                                ),
+                              )
+                            : Icon(
+                                isInLibrary
+                                    ? Icons.check_rounded
+                                    : Icons.add_rounded,
+                                size: 19,
+                                color: isInLibrary
+                                    ? tomoPink
+                                    : Colors.white,
+                              ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 8),
+
+          SizedBox(
+            height: 34,
+            child: Text(
+              manga.title,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                height: 1.15,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -694,51 +897,57 @@ class _HomeMangaTile extends StatelessWidget {
           children: [
             Stack(
               children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(14),
-              child: SizedBox(
-                width: 122,
-                height: 168,
-                child: manga.cover.isEmpty
-                    ? Container(
-                        color: tomoCard,
-                        child: const Icon(
-                          Icons.menu_book_rounded,
-                          color: Colors.white24,
-                          size: 34,
-                        ),
-                      )
-                    : TomoNetworkImage(
-                        url: manga.cover,
-                        width: 135,
-                        height: 186,
-                        fit: BoxFit.cover,
-                        cacheWidth: 260,
-                      ),
-              ),
-            ),
-            if (hasUpdate)
-              Positioned(
-                top: 6,
-                right: 6,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: tomoPink,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Text(
-                    'NEW',
-                    style: TextStyle(
-                      fontSize: 9,
-                      fontWeight: FontWeight.w800,
-                    ),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(5),
+                  child: SizedBox(
+                    width: 122,
+                    height: 168,
+                    child: manga.cover.isEmpty
+                        ? Container(
+                            color: tomoCard,
+                            child: const Icon(
+                              Icons.menu_book_rounded,
+                              color: Colors.white24,
+                              size: 34,
+                            ),
+                          )
+                        : TomoNetworkImage(
+                            url: manga.cover,
+                            width: 122,
+                            height: 168,
+                            fit: BoxFit.cover,
+                            cacheWidth: 260,
+                          ),
                   ),
                 ),
-              ),
+
+                if (hasUpdate)
+                  Positioned(
+                    top: 6,
+                    right: 6,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: tomoPink,
+                        borderRadius: BorderRadius.circular(5),
+                      ),
+                      child: const Text(
+                        'NEW',
+                        style: TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ),
               ],
             ),
+
             const SizedBox(height: 7),
+
             Text(
               manga.title,
               maxLines: 2,
@@ -768,7 +977,8 @@ class _SearchFiltersSheet extends StatefulWidget {
       _SearchFiltersSheetState();
 }
 
-class _SearchFiltersSheetState extends State<_SearchFiltersSheet> {
+class _SearchFiltersSheetState
+    extends State<_SearchFiltersSheet> {
   late String sort = widget.initial.sort;
   late String order = widget.initial.order;
   late String official = widget.initial.official;
@@ -855,7 +1065,12 @@ class _SearchFiltersSheetState extends State<_SearchFiltersSheet> {
         builder: (_, controller) {
           return ListView(
             controller: controller,
-            padding: const EdgeInsets.fromLTRB(20, 18, 20, 30),
+            padding: const EdgeInsets.fromLTRB(
+              20,
+              18,
+              20,
+              30,
+            ),
             children: [
               Row(
                 children: [
@@ -868,6 +1083,7 @@ class _SearchFiltersSheetState extends State<_SearchFiltersSheet> {
                       ),
                     ),
                   ),
+
                   TextButton(
                     onPressed: () {
                       setState(() {
@@ -885,37 +1101,64 @@ class _SearchFiltersSheetState extends State<_SearchFiltersSheet> {
                   ),
                 ],
               ),
+
               const SizedBox(height: 12),
+
               _FilterDropdown(
                 label: 'Sort',
                 value: sort,
                 values: sorts,
-                onChanged: (value) => setState(() => sort = value),
+                onChanged: (value) =>
+                    setState(() => sort = value),
               ),
+
               _FilterDropdown(
                 label: 'Order',
                 value: order,
-                values: const ['Ascending', 'Descending'],
-                onChanged: (value) => setState(() => order = value),
+                values: const [
+                  'Ascending',
+                  'Descending',
+                ],
+                onChanged: (value) =>
+                    setState(() => order = value),
               ),
+
               _FilterDropdown(
                 label: 'Official Translation',
                 value: official,
-                values: const ['Any', 'True', 'False'],
-                onChanged: (value) => setState(() => official = value),
+                values: const [
+                  'Any',
+                  'True',
+                  'False',
+                ],
+                onChanged: (value) =>
+                    setState(() => official = value),
               ),
+
               _FilterDropdown(
                 label: 'Anime Adaptation',
                 value: anime,
-                values: const ['Any', 'True', 'False'],
-                onChanged: (value) => setState(() => anime = value),
+                values: const [
+                  'Any',
+                  'True',
+                  'False',
+                ],
+                onChanged: (value) =>
+                    setState(() => anime = value),
               ),
+
               _FilterDropdown(
                 label: 'Adult Content',
                 value: adult,
-                values: const ['Any', 'True', 'False'],
-                onChanged: (value) => setState(() => adult = value),
+                values: const [
+                  'Any',
+                  'True',
+                  'False',
+                ],
+                onChanged: (value) =>
+                    setState(() => adult = value),
               ),
+
               _FilterDropdown(
                 label: 'Series Status',
                 value: status,
@@ -926,8 +1169,10 @@ class _SearchFiltersSheetState extends State<_SearchFiltersSheet> {
                   'Hiatus',
                   'Canceled',
                 ],
-                onChanged: (value) => setState(() => status = value),
+                onChanged: (value) =>
+                    setState(() => status = value),
               ),
+
               _FilterDropdown(
                 label: 'Series Type',
                 value: type,
@@ -938,9 +1183,12 @@ class _SearchFiltersSheetState extends State<_SearchFiltersSheet> {
                   'Manhua',
                   'OEL',
                 ],
-                onChanged: (value) => setState(() => type = value),
+                onChanged: (value) =>
+                    setState(() => type = value),
               ),
+
               const SizedBox(height: 8),
+
               const Text(
                 'Tags',
                 style: TextStyle(
@@ -948,7 +1196,9 @@ class _SearchFiltersSheetState extends State<_SearchFiltersSheet> {
                   fontWeight: FontWeight.w700,
                 ),
               ),
+
               const SizedBox(height: 8),
+
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
@@ -970,7 +1220,9 @@ class _SearchFiltersSheetState extends State<_SearchFiltersSheet> {
                   );
                 }).toList(),
               ),
+
               const SizedBox(height: 24),
+
               SizedBox(
                 height: 50,
                 child: FilledButton(
@@ -1037,12 +1289,18 @@ class _FilterDropdown extends StatelessWidget {
           onTap: () => _openPicker(context),
           borderRadius: BorderRadius.circular(14),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(14, 11, 12, 11),
+            padding: const EdgeInsets.fromLTRB(
+              14,
+              11,
+              12,
+              11,
+            ),
             child: Row(
               children: [
                 Expanded(
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                    crossAxisAlignment:
+                        CrossAxisAlignment.start,
                     children: [
                       Text(
                         label,
@@ -1051,7 +1309,9 @@ class _FilterDropdown extends StatelessWidget {
                           fontSize: 12,
                         ),
                       ),
+
                       const SizedBox(height: 3),
+
                       Text(
                         value,
                         style: const TextStyle(
@@ -1063,6 +1323,7 @@ class _FilterDropdown extends StatelessWidget {
                     ],
                   ),
                 ),
+
                 const Icon(
                   Icons.keyboard_arrow_down_rounded,
                   color: Colors.white54,
@@ -1091,13 +1352,23 @@ class _ChoiceSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     return SafeArea(
       child: Container(
-        margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        margin: const EdgeInsets.fromLTRB(
+          12,
+          0,
+          12,
+          12,
+        ),
         decoration: BoxDecoration(
           color: tomoCard,
           borderRadius: BorderRadius.circular(22),
         ),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(18, 14, 18, 10),
+          padding: const EdgeInsets.fromLTRB(
+            18,
+            14,
+            18,
+            10,
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -1109,7 +1380,9 @@ class _ChoiceSheet extends StatelessWidget {
                   borderRadius: BorderRadius.circular(10),
                 ),
               ),
+
               const SizedBox(height: 14),
+
               Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
@@ -1120,7 +1393,9 @@ class _ChoiceSheet extends StatelessWidget {
                   ),
                 ),
               ),
+
               const SizedBox(height: 8),
+
               Flexible(
                 child: ListView.builder(
                   shrinkWrap: true,
@@ -1136,15 +1411,19 @@ class _ChoiceSheet extends StatelessWidget {
                       borderRadius: BorderRadius.circular(14),
                       child: InkWell(
                         borderRadius: BorderRadius.circular(14),
-                        onTap: () => Navigator.pop(context, item),
+                        onTap: () =>
+                            Navigator.pop(context, item),
                         child: Padding(
-                          padding: const EdgeInsets.symmetric(
+                          padding:
+                              const EdgeInsets.symmetric(
                             horizontal: 12,
                             vertical: 12,
                           ),
                           child: Row(
                             children: [
-                              Expanded(child: Text(item)),
+                              Expanded(
+                                child: Text(item),
+                              ),
                               if (selected)
                                 const Icon(
                                   Icons.check_rounded,

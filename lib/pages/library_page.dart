@@ -517,48 +517,51 @@ class _LibraryGridTile extends StatelessWidget {
         children: [
           AspectRatio(
             aspectRatio: 2 / 3,
-            child: Stack(
-              children: [
-                Positioned.fill(
-                  child: manga.cover.isEmpty
-                      ? Container(
-                          color: tomoCard,
-                          child: const Icon(
-                            Icons.menu_book_rounded,
-                            color: Colors.white24,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(5),
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: manga.cover.isEmpty
+                        ? Container(
+                            color: tomoCard,
+                            child: const Icon(
+                              Icons.menu_book_rounded,
+                              color: Colors.white24,
+                            ),
+                          )
+                        : TomoNetworkImage(
+                            url: manga.cover,
+                            fit: BoxFit.cover,
+                            width: 400,
+                            height: 600,
+                            cacheWidth: 360,
                           ),
-                        )
-                      : TomoNetworkImage(
-                          url: manga.cover,
-                          fit: BoxFit.cover,
-                          width: 400,
-                          height: 600,
-                          cacheWidth: 360,
+                  ),
+                  if (hasUpdate)
+                    Positioned(
+                      top: 6,
+                      right: 6,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 3,
                         ),
-                ),
-                if (hasUpdate)
-                  Positioned(
-                    top: 6,
-                    right: 6,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: tomoPink,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Text(
-                        'NEW',
-                        style: TextStyle(
-                          fontSize: 9,
-                          fontWeight: FontWeight.w800,
+                        decoration: BoxDecoration(
+                          color: tomoPink,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Text(
+                          'NEW',
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w800,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
           ),
           const SizedBox(height: 8),

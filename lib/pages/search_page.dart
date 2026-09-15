@@ -1,14 +1,11 @@
 import 'dart:async';
-
 import 'package:flutter/material.dart';
-
 import '../models/manga/manga.dart';
 import '../models/manga/manga_search_filters.dart';
 import '../services/manga/manga_service.dart';
 import '../state/library_scope.dart';
 import '../theme/tomo_theme.dart';
 import '../widgets/manga/manga_card.dart';
-import '../widgets/manga/tomo_network_image.dart';
 import 'manga/reader_launcher.dart';
 
 class SearchPage extends StatefulWidget {
@@ -21,32 +18,20 @@ class SearchPage extends StatefulWidget {
 class _SearchPageState extends State<SearchPage> {
   final TextEditingController _searchController =
       TextEditingController();
-
   final MangaService _mangaService = MangaService();
-
   Timer? _searchDebounce;
-
-  List<MangaItem> browseManga = [];
   List<MangaItem> searchResults = [];
-
   MangaSearchFilters _searchFilters =
       const MangaSearchFilters();
-
   String search = '';
-
-  bool loadingBrowse = false;
   bool searching = false;
   bool loadingMore = false;
   bool hasMoreResults = true;
-
   int _searchOffset = 0;
 
   @override
   void initState() {
     super.initState();
-
-    _loadBrowseManga();
-
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
 
@@ -54,36 +39,10 @@ class _SearchPageState extends State<SearchPage> {
     });
   }
 
-  Future<void> _loadBrowseManga() async {
-    if (!mounted) return;
-
-    setState(() {
-      loadingBrowse = true;
-    });
-
-    try {
-      final results = await _mangaService.getLatestManga();
-      if (!mounted) return;
-
-      setState(() {
-        browseManga = results;
-        loadingBrowse = false;
-      });
-    } catch (_) {
-      if (!mounted) return;
-
-      setState(() {
-        browseManga = [];
-        loadingBrowse = false;
-      });
-    }
-  }
-
   void _onSearchChanged(String value) {
     setState(() {
       search = value;
     });
-
     _searchDebounce?.cancel();
 
     final query = value.trim();
@@ -111,7 +70,6 @@ class _SearchPageState extends State<SearchPage> {
     bool loadMore = false,
   }) async {
     if (!mounted) return;
-
     if (loadMore) {
       if (loadingMore || !hasMoreResults) {
         return;
@@ -199,6 +157,45 @@ class _SearchPageState extends State<SearchPage> {
         );
       },
     );
+    if (selected == null) return;
+
+    setState(() {
+      _searchFilters = selected;
+    });
+
+    _searchDebounce?.cancel();
+
+    await _searchManga(search.trim());
+  }
+
+  Future<void> _openExploreFilters({
+    String? tag,
+    String? sort,
+  }) async {
+    final initial = MangaSearchFilters(
+      sort: sort ?? _searchFilters.sort,
+      order: _searchFilters.order,
+      official: _searchFilters.official,
+      animeAdaptation:
+          _searchFilters.animeAdaptation,
+      adultContent: _searchFilters.adultContent,
+      status: _searchFilters.status,
+      type: _searchFilters.type,
+      tags: tag != null
+          ? [tag]
+          : _searchFilters.tags,
+    );
+    final selected =
+        await showModalBottomSheet<MangaSearchFilters>(
+      context: context,
+      backgroundColor: tomoCard,
+      isScrollControlled: true,
+      builder: (_) {
+        return _SearchFiltersSheet(
+          initial: initial,
+        );
+      },
+    );
 
     if (selected == null) return;
 
@@ -229,7 +226,6 @@ class _SearchPageState extends State<SearchPage> {
   void _clearSearch() {
     _searchDebounce?.cancel();
     _searchController.clear();
-
     setState(() {
       search = '';
       searchResults = [];
@@ -245,7 +241,6 @@ class _SearchPageState extends State<SearchPage> {
   void dispose() {
     _searchDebounce?.cancel();
     _searchController.dispose();
-
     super.dispose();
   }
 
@@ -254,7 +249,6 @@ class _SearchPageState extends State<SearchPage> {
     final hasSearch =
         search.trim().isNotEmpty ||
         _searchFilters.hasFilters;
-
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(
@@ -266,10 +260,6 @@ class _SearchPageState extends State<SearchPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ------------------------------------------------------------
-            // HEADER
-            // ------------------------------------------------------------
-
             const Text(
               'Search',
               style: TextStyle(
@@ -278,9 +268,7 @@ class _SearchPageState extends State<SearchPage> {
                 letterSpacing: -0.8,
               ),
             ),
-
             const SizedBox(height: 4),
-
             Text(
               hasSearch
                   ? 'Search results'
@@ -291,13 +279,7 @@ class _SearchPageState extends State<SearchPage> {
                 fontWeight: FontWeight.w500,
               ),
             ),
-
             const SizedBox(height: 16),
-
-            // ------------------------------------------------------------
-            // SEARCH BAR
-            // ------------------------------------------------------------
-
             Row(
               children: [
                 Expanded(
@@ -356,9 +338,7 @@ class _SearchPageState extends State<SearchPage> {
                     ),
                   ),
                 ),
-
                 const SizedBox(width: 8),
-
                 Material(
                   color: _searchFilters.hasFilters
                       ? tomoPink.withOpacity(0.14)
@@ -384,13 +364,7 @@ class _SearchPageState extends State<SearchPage> {
                 ),
               ],
             ),
-
             const SizedBox(height: 20),
-
-            // ------------------------------------------------------------
-            // CONTENT
-            // ------------------------------------------------------------
-
             Expanded(
               child: searching
                   ? const Center(
@@ -409,79 +383,142 @@ class _SearchPageState extends State<SearchPage> {
   }
 
   Widget _buildBrowseContent() {
+    const genres = [
+      'Action',
+      'Adventure',
+      'Comedy',
+      'Drama',
+      'Fantasy',
+      'Horror',
+      'Isekai',
+      'Mystery',
+      'Romance',
+      'Sci-fi',
+      'Slice of Life',
+      'Supernatural',
+    ];
     return ListView(
       padding: const EdgeInsets.only(
         bottom: 24,
       ),
       children: [
         const _SearchSectionTitle(
-          title: 'Latest Updates',
-          icon: Icons.update_rounded,
+          title: 'Explore',
+          icon: Icons.explore_rounded,
         ),
-
-        const SizedBox(height: 12),
-
-        if (loadingBrowse)
-          const SizedBox(
-            height: 250,
-            child: Center(
-              child: CircularProgressIndicator(
-                color: tomoPink,
-              ),
-            ),
-          )
-        else if (browseManga.isEmpty)
-          const Padding(
-            padding: EdgeInsets.symmetric(
-              vertical: 50,
-            ),
-            child: Center(
-              child: Text(
-                'No manga available right now.',
-                style: TextStyle(
-                  color: Colors.white54,
-                ),
-              ),
-            ),
-          )
-        else
-          GridView.builder(
-            shrinkWrap: true,
-            physics:
-                const NeverScrollableScrollPhysics(),
-            itemCount: browseManga.length,
-            gridDelegate:
-                const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 3,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 18,
-              mainAxisExtent: 215,
-            ),
-            itemBuilder: (context, index) {
-              final manga = browseManga[index];
-
-              final store =
-                  LibraryScope.of(context);
-
-              return RepaintBoundary(
-                child: _SearchBrowseTile(
-                  manga: manga,
-                  isInLibrary:
-                      store.isInLibrary(manga.id),
-                  libraryBusy:
-                      store.busyIds.contains(
-                    manga.id,
-                  ),
-                  hasUpdate:
-                      store.hasUpdate(manga.id),
-                  onTap: () =>
-                      _openManga(manga),
-                  onLibraryToggle: () =>
-                      _toggleLibrary(manga),
-                ),
-              );
-            },
+        const SizedBox(height: 20),
+        const Text(
+          'Genres',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w800,
           ),
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: genres.map((genre) {
+            return _ExploreChip(
+              label: genre,
+              onTap: () {
+                _openExploreFilters(
+                  tag: genre,
+                );
+              },
+            );
+          }).toList(),
+        ),
+        const SizedBox(height: 28),
+        const Text(
+          'Quick Filters',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            _ExploreChip(
+              label: 'Popularity',
+              icon:
+                  Icons.local_fire_department_rounded,
+              onTap: () {
+                _openExploreFilters(
+                  sort: 'Popularity',
+                );
+              },
+            ),
+            _ExploreChip(
+              label: 'Recently Added',
+              icon: Icons.fiber_new_rounded,
+              onTap: () {
+                _openExploreFilters(
+                  sort: 'Recently Added',
+                );
+              },
+            ),
+            _ExploreChip(
+              label: 'Latest Updates',
+              icon: Icons.update_rounded,
+              onTap: () {
+                _openExploreFilters(
+                  sort: 'Latest Updates',
+                );
+              },
+            ),
+          ],
+        ),
+        const SizedBox(height: 30),
+        Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: tomoCard,
+            borderRadius:
+                BorderRadius.circular(14),
+          ),
+          child: Row(
+            crossAxisAlignment:
+                CrossAxisAlignment.start,
+            children: [
+              const Icon(
+                Icons.search_rounded,
+                color: tomoPink,
+                size: 24,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment:
+                      CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Looking for something specific?',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      'Use the search bar or filters to '
+                      'find exactly what you want to read.',
+                      style: TextStyle(
+                        color: Colors.white
+                            .withOpacity(0.55),
+                        fontSize: 12,
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ],
     );
   }
@@ -497,7 +534,6 @@ class _SearchPageState extends State<SearchPage> {
         ),
       );
     }
-
     return ListView.separated(
       cacheExtent: 500,
       padding: const EdgeInsets.only(
@@ -585,14 +621,61 @@ class _SearchPageState extends State<SearchPage> {
   }
 }
 
-// ==========================================================================
-// SEARCH SECTION TITLE
-// ==========================================================================
+class _ExploreChip extends StatelessWidget {
+  final String label;
+  final IconData? icon;
+  final VoidCallback onTap;
+  const _ExploreChip({
+    required this.label,
+    required this.onTap,
+    this.icon,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: tomoCard,
+      borderRadius:
+          BorderRadius.circular(10),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius:
+            BorderRadius.circular(10),
+        child: Padding(
+          padding:
+              const EdgeInsets.symmetric(
+            horizontal: 13,
+            vertical: 10,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (icon != null) ...[
+                Icon(
+                  icon,
+                  size: 16,
+                  color: tomoPink,
+                ),
+                const SizedBox(width: 6),
+              ],
+              Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 class _SearchSectionTitle extends StatelessWidget {
   final String title;
   final IconData icon;
-
   const _SearchSectionTitle({
     required this.title,
     required this.icon,
@@ -613,17 +696,13 @@ class _SearchSectionTitle extends StatelessWidget {
                 BorderRadius.circular(99),
           ),
         ),
-
         const SizedBox(width: 10),
-
         Icon(
           icon,
           color: tomoPink,
           size: 19,
         ),
-
         const SizedBox(width: 7),
-
         Text(
           title,
           style: const TextStyle(
@@ -637,161 +716,8 @@ class _SearchSectionTitle extends StatelessWidget {
   }
 }
 
-// ==========================================================================
-// SEARCH BROWSE TILE
-// ==========================================================================
-
-class _SearchBrowseTile extends StatelessWidget {
-  final MangaItem manga;
-  final bool hasUpdate;
-  final bool isInLibrary;
-  final bool libraryBusy;
-  final VoidCallback onTap;
-  final VoidCallback onLibraryToggle;
-
-  const _SearchBrowseTile({
-    required this.manga,
-    required this.hasUpdate,
-    required this.isInLibrary,
-    required this.libraryBusy,
-    required this.onTap,
-    required this.onLibraryToggle,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Column(
-        crossAxisAlignment:
-            CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Stack(
-              children: [
-                Positioned.fill(
-                  child: ClipRRect(
-                    borderRadius:
-                        BorderRadius.circular(5),
-                    child: manga.cover.isEmpty
-                        ? Container(
-                            color: tomoCard,
-                            child: const Icon(
-                              Icons.menu_book_rounded,
-                              color: Colors.white24,
-                              size: 34,
-                            ),
-                          )
-                        : TomoNetworkImage(
-                            url: manga.cover,
-                            fit: BoxFit.cover,
-                            width: 400,
-                            height: 600,
-                            cacheWidth: 360,
-                          ),
-                  ),
-                ),
-
-                if (hasUpdate)
-                  Positioned(
-                    top: 6,
-                    right: 6,
-                    child: Container(
-                      padding:
-                          const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: tomoPink,
-                        borderRadius:
-                            BorderRadius.circular(5),
-                      ),
-                      child: const Text(
-                        'NEW',
-                        style: TextStyle(
-                          fontSize: 9,
-                          fontWeight:
-                              FontWeight.w800,
-                        ),
-                      ),
-                    ),
-                  ),
-
-                Positioned(
-                  left: 6,
-                  bottom: 6,
-                  child: Material(
-                    color: Colors.black
-                        .withOpacity(0.72),
-                    shape: const CircleBorder(),
-                    child: InkWell(
-                      onTap: libraryBusy
-                          ? null
-                          : onLibraryToggle,
-                      customBorder:
-                          const CircleBorder(),
-                      child: SizedBox(
-                        width: 32,
-                        height: 32,
-                        child: libraryBusy
-                            ? const Padding(
-                                padding:
-                                    EdgeInsets.all(8),
-                                child:
-                                    CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: tomoPink,
-                                ),
-                              )
-                            : Icon(
-                                isInLibrary
-                                    ? Icons
-                                        .check_rounded
-                                    : Icons
-                                        .add_rounded,
-                                size: 19,
-                                color: isInLibrary
-                                    ? tomoPink
-                                    : Colors.white,
-                              ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 8),
-
-          SizedBox(
-            height: 34,
-            child: Text(
-              manga.title,
-              maxLines: 2,
-              overflow:
-                  TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                height: 1.15,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ==========================================================================
-// SEARCH FILTERS
-// ==========================================================================
-
 class _SearchFiltersSheet extends StatefulWidget {
   final MangaSearchFilters initial;
-
   const _SearchFiltersSheet({
     required this.initial,
   });
@@ -812,7 +738,6 @@ class _SearchFiltersSheetState
       widget.initial.adultContent;
   late String status = widget.initial.status;
   late String type = widget.initial.type;
-
   late Set<String> tags =
       {...widget.initial.tags};
 
@@ -928,9 +853,7 @@ class _SearchFiltersSheetState
                   ),
                 ],
               ),
-
               const SizedBox(height: 12),
-
               _FilterDropdown(
                 label: 'Sort',
                 value: sort,
@@ -938,7 +861,6 @@ class _SearchFiltersSheetState
                 onChanged: (value) =>
                     setState(() => sort = value),
               ),
-
               _FilterDropdown(
                 label: 'Order',
                 value: order,
@@ -949,7 +871,6 @@ class _SearchFiltersSheetState
                 onChanged: (value) =>
                     setState(() => order = value),
               ),
-
               _FilterDropdown(
                 label: 'Official Translation',
                 value: official,
@@ -961,7 +882,6 @@ class _SearchFiltersSheetState
                 onChanged: (value) =>
                     setState(() => official = value),
               ),
-
               _FilterDropdown(
                 label: 'Anime Adaptation',
                 value: anime,
@@ -973,7 +893,6 @@ class _SearchFiltersSheetState
                 onChanged: (value) =>
                     setState(() => anime = value),
               ),
-
               _FilterDropdown(
                 label: 'Adult Content',
                 value: adult,
@@ -985,7 +904,6 @@ class _SearchFiltersSheetState
                 onChanged: (value) =>
                     setState(() => adult = value),
               ),
-
               _FilterDropdown(
                 label: 'Series Status',
                 value: status,
@@ -999,7 +917,6 @@ class _SearchFiltersSheetState
                 onChanged: (value) =>
                     setState(() => status = value),
               ),
-
               _FilterDropdown(
                 label: 'Series Type',
                 value: type,
@@ -1013,9 +930,7 @@ class _SearchFiltersSheetState
                 onChanged: (value) =>
                     setState(() => type = value),
               ),
-
               const SizedBox(height: 8),
-
               const Text(
                 'Tags',
                 style: TextStyle(
@@ -1023,9 +938,7 @@ class _SearchFiltersSheetState
                   fontWeight: FontWeight.w700,
                 ),
               ),
-
               const SizedBox(height: 8),
-
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
@@ -1048,9 +961,7 @@ class _SearchFiltersSheetState
                   );
                 }).toList(),
               ),
-
               const SizedBox(height: 24),
-
               SizedBox(
                 height: 50,
                 child: FilledButton(
@@ -1064,6 +975,7 @@ class _SearchFiltersSheetState
                     style: TextStyle(
                       fontWeight:
                           FontWeight.w800,
+                      color: Colors.white,
                     ),
                   ),
                 ),
@@ -1076,16 +988,11 @@ class _SearchFiltersSheetState
   }
 }
 
-// ==========================================================================
-// FILTER DROPDOWN
-// ==========================================================================
-
 class _FilterDropdown extends StatelessWidget {
   final String label;
   final String value;
   final List<String> values;
   final ValueChanged<String> onChanged;
-
   const _FilterDropdown({
     required this.label,
     required this.value,
@@ -1093,7 +1000,7 @@ class _FilterDropdown extends StatelessWidget {
     required this.onChanged,
   });
 
-  Future<void> _openPicker(
+  Future<void> openPicker(
     BuildContext context,
   ) async {
     final selected =
@@ -1109,7 +1016,6 @@ class _FilterDropdown extends StatelessWidget {
         );
       },
     );
-
     if (selected != null) {
       onChanged(selected);
     }
@@ -1126,7 +1032,7 @@ class _FilterDropdown extends StatelessWidget {
             BorderRadius.circular(14),
         child: InkWell(
           onTap: () =>
-              _openPicker(context),
+              openPicker(context),
           borderRadius:
               BorderRadius.circular(14),
           child: Padding(
@@ -1178,15 +1084,10 @@ class _FilterDropdown extends StatelessWidget {
   }
 }
 
-// ==========================================================================
-// CHOICE SHEET
-// ==========================================================================
-
 class _ChoiceSheet extends StatelessWidget {
   final String title;
   final String value;
   final List<String> values;
-
   const _ChoiceSheet({
     required this.title,
     required this.value,
@@ -1227,9 +1128,7 @@ class _ChoiceSheet extends StatelessWidget {
                       BorderRadius.circular(10),
                 ),
               ),
-
               const SizedBox(height: 14),
-
               Align(
                 alignment:
                     Alignment.centerLeft,
@@ -1241,9 +1140,7 @@ class _ChoiceSheet extends StatelessWidget {
                   ),
                 ),
               ),
-
               const SizedBox(height: 8),
-
               Flexible(
                 child: ListView.builder(
                   shrinkWrap: true,

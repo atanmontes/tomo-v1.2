@@ -124,6 +124,16 @@ class MangaService {
     return pages;
   }
 
+  Future<List<MangaItem>> getLatestManga() async {
+    return searchManga(
+      '',
+      filters: MangaSearchFilters(
+        sort: 'Latest Updates',
+        order: 'Descending',
+      ),
+    );
+  }
+
   String _sortValue(String value) {
     switch (value) {
       case 'Alphabet':

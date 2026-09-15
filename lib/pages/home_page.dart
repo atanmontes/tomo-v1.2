@@ -3,14 +3,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../models/manga/manga.dart';
-import '../models/manga/manga_search_filters.dart';
 import '../services/manga/manga_service.dart';
 import '../state/library_scope.dart';
 import '../theme/tomo_theme.dart';
-import '../widgets/manga/manga_card.dart';
 import '../widgets/manga/tomo_network_image.dart';
 import 'manga/reader_launcher.dart';
 import 'library_page.dart';
+import 'search_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -44,6 +43,7 @@ class _HomePageState extends State<HomePage> {
         index: _selectedIndex,
         children: [
           _HomeContent(key: _homeKey),
+          const SearchPage(),
           const LibraryPage(),
         ],
       ),
@@ -73,6 +73,14 @@ class _HomePageState extends State<HomePage> {
               label: 'Home',
             ),
             NavigationDestination(
+              icon: Icon(Icons.search_rounded),
+              selectedIcon: Icon(
+                Icons.search_rounded,
+                color: tomoPink,
+              ),
+              label: 'Search',
+            ),
+            NavigationDestination(
               icon: Icon(Icons.collections_bookmark_outlined),
               selectedIcon: Icon(
                 Icons.collections_bookmark_rounded,
@@ -87,6 +95,10 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
+// ==========================================================================
+// HOME CONTENT
+// ==========================================================================
+
 class _HomeContent extends StatefulWidget {
   const _HomeContent({super.key});
 
@@ -96,24 +108,9 @@ class _HomeContent extends StatefulWidget {
 
 class _HomeContentState extends State<_HomeContent> {
   List<MangaItem> latestManga = [];
-  List<MangaItem> searchResults = [];
-
-  String search = '';
-  bool searching = false;
   bool loadingLatest = false;
-  bool loadingMore = false;
-  bool hasMoreResults = true;
-
-  int _searchOffset = 0;
-
-  Timer? _searchDebounce;
-
-  final TextEditingController _searchController =
-      TextEditingController();
 
   final MangaService _mangaService = MangaService();
-
-  MangaSearchFilters _searchFilters = const MangaSearchFilters();
 
   @override
   void initState() {
@@ -136,21 +133,15 @@ class _HomeContentState extends State<_HomeContent> {
     });
 
     try {
-      final results = await _mangaService.searchManga(
-        '',
-        filters: const MangaSearchFilters(
-          sort: 'Latest Updates',
-          order: 'Descending',
-        ),
-      );
+      final results = await _mangaService.getLatestManga();
 
       if (!mounted) return;
 
       setState(() {
-        latestManga = results.take(12).toList();
+        latestManga = results;
         loadingLatest = false;
       });
-    } catch (error) {
+    } catch (_) {
       if (!mounted) return;
 
       setState(() {
@@ -158,137 +149,6 @@ class _HomeContentState extends State<_HomeContent> {
         loadingLatest = false;
       });
     }
-  }
-
-  void _onSearchChanged(String value) {
-    setState(() {
-      search = value;
-    });
-
-    _searchDebounce?.cancel();
-
-    final query = value.trim();
-
-    if (query.isEmpty) {
-      setState(() {
-        searchResults = [];
-        searching = false;
-      });
-      return;
-    }
-
-    _searchDebounce = Timer(
-      const Duration(milliseconds: 450),
-      () => _searchManga(query),
-    );
-  }
-
-  Future<void> _searchManga(
-    String query, {
-    bool loadMore = false,
-  }) async {
-    if (!mounted) return;
-
-    if (loadMore) {
-      if (loadingMore || !hasMoreResults) {
-        return;
-      }
-
-      setState(() {
-        loadingMore = true;
-      });
-    } else {
-      setState(() {
-        searching = true;
-        loadingMore = false;
-        hasMoreResults = true;
-        _searchOffset = 0;
-        searchResults = [];
-      });
-    }
-
-    final offset = loadMore ? _searchOffset : 0;
-
-    try {
-      final results = await _mangaService.searchManga(
-        query,
-        filters: _searchFilters,
-        offset: offset,
-      );
-
-      if (!mounted || search.trim() != query) {
-        return;
-      }
-
-      setState(() {
-        if (loadMore) {
-          final existingIds =
-              searchResults.map((manga) => manga.id).toSet();
-
-          searchResults.addAll(
-            results.where(
-              (manga) => !existingIds.contains(manga.id),
-            ),
-          );
-        } else {
-          searchResults = results;
-        }
-
-        _searchOffset += results.length;
-
-        hasMoreResults = results.length == 32;
-
-        searching = false;
-        loadingMore = false;
-      });
-    } catch (_) {
-      if (!mounted || search.trim() != query) {
-        return;
-      }
-
-      setState(() {
-        if (loadMore) {
-          loadingMore = false;
-        } else {
-          searchResults = [];
-          searching = false;
-        }
-      });
-    }
-  }
-
-  Future<void> _loadMoreResults() async {
-    await _searchManga(
-      search.trim(),
-      loadMore: true,
-    );
-  }
-
-  Future<void> _openSearchFilters() async {
-    final selected = await showModalBottomSheet<MangaSearchFilters>(
-      context: context,
-      backgroundColor: tomoCard,
-      isScrollControlled: true,
-      builder: (_) {
-        return _SearchFiltersSheet(
-          initial: _searchFilters,
-        );
-      },
-    );
-
-    if (selected == null) return;
-
-    setState(() {
-      _searchFilters = selected;
-    });
-
-    _searchDebounce?.cancel();
-
-    await _searchManga(search.trim());
-  }
-
-  bool _isInLibrary(MangaItem manga) {
-    return LibraryScope.of(context).isInLibrary(manga.id);
   }
 
   Future<void> _toggleLibrary(MangaItem manga) async {
@@ -310,35 +170,8 @@ class _HomeContentState extends State<_HomeContent> {
     );
   }
 
-  Future<void> _clearSearch() async {
-    _searchDebounce?.cancel();
-    _searchController.clear();
-
-    setState(() {
-      search = '';
-      searchResults = [];
-      searching = false;
-      loadingMore = false;
-      hasMoreResults = true;
-      _searchOffset = 0;
-      _searchFilters = const MangaSearchFilters();
-    });
-
-    await _loadLatest();
-  }
-
-  @override
-  void dispose() {
-    _searchDebounce?.cancel();
-    _searchController.dispose();
-    super.dispose();
-  }
-
   @override
   Widget build(BuildContext context) {
-    final hasSearch =
-        search.trim().isNotEmpty || _searchFilters.hasFilters;
-
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
@@ -379,9 +212,7 @@ class _HomeContentState extends State<_HomeContent> {
                     ],
                   ),
                 ),
-
                 const SizedBox(width: 10),
-
                 const Padding(
                   padding: EdgeInsets.only(bottom: 5),
                   child: Text(
@@ -396,202 +227,20 @@ class _HomeContentState extends State<_HomeContent> {
               ],
             ),
 
-            const SizedBox(height: 16),
-
-            // ------------------------------------------------------------
-            // SEARCH
-            // ------------------------------------------------------------
-
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _searchController,
-                    onChanged: _onSearchChanged,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                    ),
-                    decoration: InputDecoration(
-                      hintText: 'Search WeebCentral...',
-                      hintStyle: const TextStyle(
-                        color: Colors.white38,
-                      ),
-                      prefixIcon: const Icon(
-                        Icons.search,
-                        color: Colors.white38,
-                        size: 21,
-                      ),
-                      suffixIcon: search.isNotEmpty
-                          ? IconButton(
-                              onPressed: _clearSearch,
-                              icon: const Icon(
-                                Icons.close_rounded,
-                                color: Colors.white54,
-                                size: 20,
-                              ),
-                            )
-                          : null,
-                      filled: true,
-                      fillColor: tomoCard,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(18),
-                        borderSide: BorderSide.none,
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(18),
-                        borderSide: BorderSide.none,
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(18),
-                        borderSide: const BorderSide(
-                          color: tomoPink,
-                          width: 1,
-                        ),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        vertical: 14,
-                      ),
-                    ),
-                  ),
-                ),
-
-                const SizedBox(width: 8),
-
-                Material(
-                  color: tomoCard,
-                  borderRadius: BorderRadius.circular(18),
-                  child: InkWell(
-                    onTap: _openSearchFilters,
-                    borderRadius: BorderRadius.circular(18),
-                    child: SizedBox(
-                      width: 50,
-                      height: 52,
-                      child: Icon(
-                        Icons.tune_rounded,
-                        color: _searchFilters.hasFilters
-                            ? tomoPink
-                            : Colors.white70,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-
             const SizedBox(height: 18),
 
             // ------------------------------------------------------------
-            // SEARCH / HOME CONTENT
+            // HOME CONTENT
             // ------------------------------------------------------------
 
             Expanded(
-              child: searching
-                  ? const Center(
-                      child: CircularProgressIndicator(
-                        color: tomoPink,
-                      ),
-                    )
-                  : hasSearch
-                      ? searchResults.isEmpty
-                          ? const Center(
-                              child: Text(
-                                'No manga found.',
-                                style: TextStyle(
-                                  color: Colors.white54,
-                                ),
-                              ),
-                            )
-                          : ListView.separated(
-                              cacheExtent: 500,
-                              padding: const EdgeInsets.only(
-                                bottom: 24,
-                              ),
-                              itemCount: searchResults.length +
-                                  (hasMoreResults ? 1 : 0),
-                              separatorBuilder: (_, index) {
-                                if (index >= searchResults.length) {
-                                  return const SizedBox.shrink();
-                                }
-
-                                return const SizedBox(height: 10);
-                              },
-                              itemBuilder: (context, index) {
-                                if (index >= searchResults.length) {
-                                  return Padding(
-                                    padding: const EdgeInsets.only(
-                                      top: 8,
-                                      bottom: 12,
-                                    ),
-                                    child: Center(
-                                      child: Material(
-                                        color: tomoCard,
-                                        borderRadius:
-                                            BorderRadius.circular(18),
-                                        child: InkWell(
-                                          onTap: loadingMore
-                                              ? null
-                                              : _loadMoreResults,
-                                          borderRadius:
-                                              BorderRadius.circular(14),
-                                          child: Padding(
-                                            padding:
-                                                const EdgeInsets.symmetric(
-                                              horizontal: 28,
-                                              vertical: 13,
-                                            ),
-                                            child: loadingMore
-                                                ? const SizedBox(
-                                                    width: 22,
-                                                    height: 22,
-                                                    child:
-                                                        CircularProgressIndicator(
-                                                      strokeWidth: 2.2,
-                                                      color: tomoPink,
-                                                    ),
-                                                  )
-                                                : const Text(
-                                                    'Load More',
-                                                    style: TextStyle(
-                                                      fontWeight:
-                                                          FontWeight.w700,
-                                                      color: Colors.white,
-                                                    ),
-                                                  ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  );
-                                }
-
-                                final manga = searchResults[index];
-
-                                return RepaintBoundary(
-                                  child: MangaCard(
-                                    manga: manga,
-                                    onTap: () => _openManga(manga),
-                                    isInLibrary:
-                                        _isInLibrary(manga),
-                                    libraryBusy:
-                                        LibraryScope.of(context)
-                                            .busyIds
-                                            .contains(manga.id),
-                                    onLibraryToggle: () {
-                                      _toggleLibrary(manga);
-                                    },
-                                    showAuthor: false,
-                                  ),
-                                );
-                              },
-                            )
-                      : _HomeContentSections(
-                          latestManga: latestManga,
-                          loadingLatest: loadingLatest,
-                          onOpen: _openManga,
-                          onContinue: _continueManga,
-                          onLibraryToggle: _toggleLibrary,
-                        ),
+              child: _HomeContentSections(
+                latestManga: latestManga,
+                loadingLatest: loadingLatest,
+                onOpen: _openManga,
+                onContinue: _continueManga,
+                onLibraryToggle: _toggleLibrary,
+              ),
             ),
           ],
         ),
@@ -630,10 +279,6 @@ class _HomeContentSections extends StatelessWidget {
         .take(6)
         .toList();
 
-    // ----------------------------------------------------------------------
-    // FEATURED MANGA
-    // ----------------------------------------------------------------------
-
     final featuredManga = latestManga
         .where(
           (manga) => !store.isInLibrary(manga.id),
@@ -644,10 +289,6 @@ class _HomeContentSections extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.only(bottom: 24),
       children: [
-        // ------------------------------------------------------------------
-        // DISCOVER SOMETHING NEW
-        // ------------------------------------------------------------------
-
         if (loadingLatest)
           const SizedBox(
             height: 360,
@@ -761,10 +402,8 @@ class _HomeContentSections extends StatelessWidget {
                 child: _HomeLatestTile(
                   manga: manga,
                   hasUpdate: store.hasUpdate(manga.id),
-                  isInLibrary:
-                      store.isInLibrary(manga.id),
-                  libraryBusy:
-                      store.busyIds.contains(manga.id),
+                  isInLibrary: store.isInLibrary(manga.id),
+                  libraryBusy: store.busyIds.contains(manga.id),
                   onTap: () => onOpen(manga),
                   onLibraryToggle: () =>
                       onLibraryToggle(manga),
@@ -803,17 +442,13 @@ class _SectionTitle extends StatelessWidget {
             borderRadius: BorderRadius.circular(99),
           ),
         ),
-
         const SizedBox(width: 10),
-
         Icon(
           icon,
           color: tomoPink,
           size: 19,
         ),
-
         const SizedBox(width: 7),
-
         Text(
           title,
           style: const TextStyle(
@@ -852,7 +487,6 @@ class _FeaturedMangaCarouselState
   late final PageController _pageController;
 
   Timer? _autoSlideTimer;
-
   int _currentPage = 0;
 
   @override
@@ -922,9 +556,7 @@ class _FeaturedMangaCarouselState
               final manga = widget.manga[index];
 
               return Padding(
-                padding: const EdgeInsets.only(
-                  right: 8,
-                ),
+                padding: const EdgeInsets.only(right: 8),
                 child: _FeaturedMangaHero(
                   manga: manga,
                   onStartReading: () =>
@@ -936,21 +568,17 @@ class _FeaturedMangaCarouselState
             },
           ),
         ),
-
         if (widget.manga.length > 1) ...[
           const SizedBox(height: 12),
-
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: List.generate(
               widget.manga.length,
               (index) {
-                final selected =
-                    index == _currentPage;
+                final selected = index == _currentPage;
 
                 return AnimatedContainer(
-                  duration:
-                      const Duration(milliseconds: 250),
+                  duration: const Duration(milliseconds: 250),
                   curve: Curves.easeOut,
                   margin: const EdgeInsets.symmetric(
                     horizontal: 3,
@@ -973,7 +601,6 @@ class _FeaturedMangaCarouselState
     );
   }
 }
-
 
 // ==========================================================================
 // FEATURED MANGA HERO
@@ -1002,11 +629,6 @@ class _FeaturedMangaHero extends StatelessWidget {
           child: Stack(
             fit: StackFit.expand,
             children: [
-
-              // ------------------------------------------------------------
-              // AMBIENT COVER LAYER
-              // ------------------------------------------------------------
-
               if (manga.cover.isNotEmpty)
                 Positioned.fill(
                   child: Opacity(
@@ -1023,10 +645,6 @@ class _FeaturedMangaHero extends StatelessWidget {
                     ),
                   ),
                 ),
-
-              // ------------------------------------------------------------
-              // MAIN COVER
-              // ------------------------------------------------------------
 
               Positioned.fill(
                 child: manga.cover.isEmpty
@@ -1046,10 +664,6 @@ class _FeaturedMangaHero extends StatelessWidget {
                         cacheWidth: 900,
                       ),
               ),
-
-              // ------------------------------------------------------------
-              // TOP DARKENING
-              // ------------------------------------------------------------
 
               Positioned.fill(
                 child: DecoratedBox(
@@ -1076,10 +690,6 @@ class _FeaturedMangaHero extends StatelessWidget {
                 ),
               ),
 
-              // ------------------------------------------------------------
-              // SUBTLE SIDE GRADIENT
-              // ------------------------------------------------------------
-
               Positioned.fill(
                 child: DecoratedBox(
                   decoration: BoxDecoration(
@@ -1101,90 +711,13 @@ class _FeaturedMangaHero extends StatelessWidget {
                 ),
               ),
 
-              // ------------------------------------------------------------
-              // FEATURED LABEL
-              // ------------------------------------------------------------
-
-              Positioned(
-                top: 18,
-                left: 18,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 9,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.42),
-                    borderRadius:
-                        BorderRadius.circular(6),
-                    border: Border.all(
-                      color: Colors.white.withOpacity(0.14),
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: 5,
-                        height: 5,
-                        decoration: const BoxDecoration(
-                          color: tomoPink,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 7),
-                      const Text(
-                        'FEATURED',
-                        style: TextStyle(
-                          fontSize: 9.5,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 1.1,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-              // ------------------------------------------------------------
-              // TOMO ACCENT
-              // ------------------------------------------------------------
-
-              Positioned(
-                top: 18,
-                right: 18,
-                child: Container(
-                  width: 28,
-                  height: 28,
-                  decoration: BoxDecoration(
-                    color: tomoPink.withOpacity(0.90),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.auto_awesome_rounded,
-                    color: Colors.white,
-                    size: 15,
-                  ),
-                ),
-              ),
-
-              // ------------------------------------------------------------
-              // CONTENT
-              // ------------------------------------------------------------
-
               Positioned(
                 left: 20,
                 right: 20,
                 bottom: 20,
                 child: Column(
-                  crossAxisAlignment:
-                      CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-
-                    // ------------------------------------------------------
-                    // DECORATIVE LINE
-                    // ------------------------------------------------------
-
                     Row(
                       children: [
                         Container(
@@ -1211,10 +744,6 @@ class _FeaturedMangaHero extends StatelessWidget {
 
                     const SizedBox(height: 9),
 
-                    // ------------------------------------------------------
-                    // TITLE
-                    // ------------------------------------------------------
-
                     Text(
                       manga.title,
                       maxLines: 2,
@@ -1236,23 +765,13 @@ class _FeaturedMangaHero extends StatelessWidget {
 
                     const SizedBox(height: 16),
 
-                    // ------------------------------------------------------
-                    // ACTIONS
-                    // ------------------------------------------------------
-
                     Row(
                       children: [
-
-                        // --------------------------------------------------
-                        // START READING
-                        // --------------------------------------------------
-
                         Expanded(
                           child: SizedBox(
                             height: 44,
                             child: FilledButton.icon(
-                              onPressed:
-                                  onStartReading,
+                              onPressed: onStartReading,
                               icon: const Icon(
                                 Icons.play_arrow_rounded,
                                 size: 21,
@@ -1265,22 +784,16 @@ class _FeaturedMangaHero extends StatelessWidget {
                                       FontWeight.w800,
                                 ),
                               ),
-                              style:
-                                  FilledButton.styleFrom(
-                                backgroundColor:
-                                    tomoPink,
-                                foregroundColor:
-                                    Colors.white,
+                              style: FilledButton.styleFrom(
+                                backgroundColor: tomoPink,
+                                foregroundColor: Colors.white,
                                 elevation: 4,
                                 shadowColor:
-                                    tomoPink.withOpacity(
-                                  0.28,
-                                ),
+                                    tomoPink.withOpacity(0.28),
                                 shape:
                                     RoundedRectangleBorder(
                                   borderRadius:
-                                      BorderRadius
-                                          .circular(8),
+                                      BorderRadius.circular(8),
                                 ),
                               ),
                             ),
@@ -1289,33 +802,24 @@ class _FeaturedMangaHero extends StatelessWidget {
 
                         const SizedBox(width: 8),
 
-                        // --------------------------------------------------
-                        // SUBSCRIBE
-                        // --------------------------------------------------
-
                         SizedBox(
                           width: 48,
                           height: 44,
                           child: OutlinedButton(
                             onPressed: onSubscribe,
-                            style:
-                                OutlinedButton.styleFrom(
-                              foregroundColor:
-                                  Colors.white,
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.white,
                               backgroundColor:
-                                  Colors.black
-                                      .withOpacity(0.38),
+                                  Colors.black.withOpacity(0.38),
                               side: BorderSide(
-                                color: Colors.white
-                                    .withOpacity(0.38),
+                                color:
+                                    Colors.white.withOpacity(0.38),
                               ),
                               padding: EdgeInsets.zero,
                               shape:
                                   RoundedRectangleBorder(
                                 borderRadius:
-                                    BorderRadius.circular(
-                                  8,
-                                ),
+                                    BorderRadius.circular(8),
                               ),
                             ),
                             child: const Icon(
@@ -1388,19 +892,20 @@ class _HomeMangaTile extends StatelessWidget {
                           ),
                   ),
                 ),
-
                 if (hasUpdate)
                   Positioned(
                     top: 6,
                     right: 6,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(
+                      padding:
+                          const EdgeInsets.symmetric(
                         horizontal: 6,
                         vertical: 3,
                       ),
                       decoration: BoxDecoration(
                         color: tomoPink,
-                        borderRadius: BorderRadius.circular(5),
+                        borderRadius:
+                            BorderRadius.circular(5),
                       ),
                       child: const Text(
                         'NEW',
@@ -1504,13 +1009,15 @@ class _HomeLatestTile extends StatelessWidget {
                     top: 6,
                     right: 6,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(
+                      padding:
+                          const EdgeInsets.symmetric(
                         horizontal: 6,
                         vertical: 3,
                       ),
                       decoration: BoxDecoration(
                         color: tomoPink,
-                        borderRadius: BorderRadius.circular(5),
+                        borderRadius:
+                            BorderRadius.circular(5),
                       ),
                       child: const Text(
                         'NEW',
@@ -1538,7 +1045,8 @@ class _HomeLatestTile extends StatelessWidget {
                         height: 32,
                         child: libraryBusy
                             ? const Padding(
-                                padding: EdgeInsets.all(8),
+                                padding:
+                                    EdgeInsets.all(8),
                                 child:
                                     CircularProgressIndicator(
                                   strokeWidth: 2,
@@ -1578,494 +1086,6 @@ class _HomeLatestTile extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-// ==========================================================================
-// SEARCH FILTERS
-// ==========================================================================
-
-class _SearchFiltersSheet extends StatefulWidget {
-  final MangaSearchFilters initial;
-
-  const _SearchFiltersSheet({
-    required this.initial,
-  });
-
-  @override
-  State<_SearchFiltersSheet> createState() =>
-      _SearchFiltersSheetState();
-}
-
-class _SearchFiltersSheetState
-    extends State<_SearchFiltersSheet> {
-  late String sort = widget.initial.sort;
-  late String order = widget.initial.order;
-  late String official = widget.initial.official;
-  late String anime = widget.initial.animeAdaptation;
-  late String adult = widget.initial.adultContent;
-  late String status = widget.initial.status;
-  late String type = widget.initial.type;
-  late Set<String> tags = {...widget.initial.tags};
-
-  static const sorts = [
-    'Best Match',
-    'Alphabet',
-    'Popularity',
-    'Subscribers',
-    'Recently Added',
-    'Latest Updates',
-  ];
-
-  static const tagsList = [
-    'Action',
-    'Adult',
-    'Adventure',
-    'Comedy',
-    'Doujinshi',
-    'Drama',
-    'Ecchi',
-    'Fantasy',
-    'Gender Bender',
-    'Harem',
-    'Hentai',
-    'Historical',
-    'Horror',
-    'Isekai',
-    'Josei',
-    'Lolicon',
-    'Martial Arts',
-    'Mature',
-    'Mecha',
-    'Mystery',
-    'Psychological',
-    'Romance',
-    'School Life',
-    'Sci-fi',
-    'Seinen',
-    'Shotacon',
-    'Shoujo',
-    'Shoujo Ai',
-    'Shounen',
-    'Shounen Ai',
-    'Slice of Life',
-    'Smut',
-    'Sports',
-    'Supernatural',
-    'Tragedy',
-    'Yaoi',
-    'Yuri',
-    'Other',
-  ];
-
-  void _apply() {
-    Navigator.pop(
-      context,
-      MangaSearchFilters(
-        sort: sort,
-        order: order,
-        official: official,
-        animeAdaptation: anime,
-        adultContent: adult,
-        status: status,
-        type: type,
-        tags: tags.toList(),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: DraggableScrollableSheet(
-        expand: false,
-        initialChildSize: 0.9,
-        minChildSize: 0.55,
-        maxChildSize: 0.95,
-        builder: (_, controller) {
-          return ListView(
-            controller: controller,
-            padding: const EdgeInsets.fromLTRB(
-              20,
-              18,
-              20,
-              30,
-            ),
-            children: [
-              Row(
-                children: [
-                  const Expanded(
-                    child: Text(
-                      'Search Filters',
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: () {
-                      setState(() {
-                        sort = 'Best Match';
-                        order = 'Ascending';
-                        official = 'Any';
-                        anime = 'Any';
-                        adult = 'Any';
-                        status = 'Any';
-                        type = 'Any';
-                        tags.clear();
-                      });
-                    },
-                    child: const Text('Reset'),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 12),
-
-              _FilterDropdown(
-                label: 'Sort',
-                value: sort,
-                values: sorts,
-                onChanged: (value) =>
-                    setState(() => sort = value),
-              ),
-
-              _FilterDropdown(
-                label: 'Order',
-                value: order,
-                values: const [
-                  'Ascending',
-                  'Descending',
-                ],
-                onChanged: (value) =>
-                    setState(() => order = value),
-              ),
-
-              _FilterDropdown(
-                label: 'Official Translation',
-                value: official,
-                values: const [
-                  'Any',
-                  'True',
-                  'False',
-                ],
-                onChanged: (value) =>
-                    setState(() => official = value),
-              ),
-
-              _FilterDropdown(
-                label: 'Anime Adaptation',
-                value: anime,
-                values: const [
-                  'Any',
-                  'True',
-                  'False',
-                ],
-                onChanged: (value) =>
-                    setState(() => anime = value),
-              ),
-
-              _FilterDropdown(
-                label: 'Adult Content',
-                value: adult,
-                values: const [
-                  'Any',
-                  'True',
-                  'False',
-                ],
-                onChanged: (value) =>
-                    setState(() => adult = value),
-              ),
-
-              _FilterDropdown(
-                label: 'Series Status',
-                value: status,
-                values: const [
-                  'Any',
-                  'Ongoing',
-                  'Complete',
-                  'Hiatus',
-                  'Canceled',
-                ],
-                onChanged: (value) =>
-                    setState(() => status = value),
-              ),
-
-              _FilterDropdown(
-                label: 'Series Type',
-                value: type,
-                values: const [
-                  'Any',
-                  'Manga',
-                  'Manhwa',
-                  'Manhua',
-                  'OEL',
-                ],
-                onChanged: (value) =>
-                    setState(() => type = value),
-              ),
-
-              const SizedBox(height: 8),
-
-              const Text(
-                'Tags',
-                style: TextStyle(
-                  color: Colors.white70,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-
-              const SizedBox(height: 8),
-
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: tagsList.map((tag) {
-                  final selected = tags.contains(tag);
-
-                  return FilterChip(
-                    label: Text(tag),
-                    selected: selected,
-                    onSelected: (value) {
-                      setState(() {
-                        if (value) {
-                          tags.add(tag);
-                        } else {
-                          tags.remove(tag);
-                        }
-                      });
-                    },
-                  );
-                }).toList(),
-              ),
-
-              const SizedBox(height: 24),
-
-              SizedBox(
-                height: 50,
-                child: FilledButton(
-                  onPressed: _apply,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: tomoPink,
-                  ),
-                  child: const Text(
-                    'Apply Filters',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-}
-
-// ==========================================================================
-// FILTER DROPDOWN
-// ==========================================================================
-
-class _FilterDropdown extends StatelessWidget {
-  final String label;
-  final String value;
-  final List<String> values;
-  final ValueChanged<String> onChanged;
-
-  const _FilterDropdown({
-    required this.label,
-    required this.value,
-    required this.values,
-    required this.onChanged,
-  });
-
-  Future<void> _openPicker(BuildContext context) async {
-    final selected = await showModalBottomSheet<String>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (_) {
-        return _ChoiceSheet(
-          title: label,
-          value: value,
-          values: values,
-        );
-      },
-    );
-
-    if (selected != null) {
-      onChanged(selected);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Material(
-        color: tomoBackground,
-        borderRadius: BorderRadius.circular(14),
-        child: InkWell(
-          onTap: () => _openPicker(context),
-          borderRadius: BorderRadius.circular(14),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(
-              14,
-              11,
-              12,
-              11,
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment:
-                        CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        label,
-                        style: const TextStyle(
-                          color: Colors.white54,
-                          fontSize: 12,
-                        ),
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        value,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const Icon(
-                  Icons.keyboard_arrow_down_rounded,
-                  color: Colors.white54,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ==========================================================================
-// CHOICE SHEET
-// ==========================================================================
-
-class _ChoiceSheet extends StatelessWidget {
-  final String title;
-  final String value;
-  final List<String> values;
-
-  const _ChoiceSheet({
-    required this.title,
-    required this.value,
-    required this.values,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: Container(
-        margin: const EdgeInsets.fromLTRB(
-          12,
-          0,
-          12,
-          12,
-        ),
-        decoration: BoxDecoration(
-          color: tomoCard,
-          borderRadius: BorderRadius.circular(22),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(
-            18,
-            14,
-            18,
-            10,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 38,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.white24,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-
-              const SizedBox(height: 14),
-
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 8),
-
-              Flexible(
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: values.length,
-                  itemBuilder: (_, index) {
-                    final item = values[index];
-                    final selected = item == value;
-
-                    return Material(
-                      color: selected
-                          ? tomoPink.withOpacity(0.12)
-                          : Colors.transparent,
-                      borderRadius: BorderRadius.circular(14),
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(14),
-                        onTap: () =>
-                            Navigator.pop(context, item),
-                        child: Padding(
-                          padding:
-                              const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 12,
-                          ),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Text(item),
-                              ),
-                              if (selected)
-                                const Icon(
-                                  Icons.check_rounded,
-                                  color: tomoPink,
-                                ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }

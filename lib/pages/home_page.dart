@@ -10,6 +10,7 @@ import '../theme/tomo_theme.dart';
 import '../widgets/manga/manga_card.dart';
 import '../widgets/manga/tomo_network_image.dart';
 import 'manga/manga_detail_page.dart';
+import 'manga/reader_launcher.dart';
 import 'library_page.dart';
 
 class HomePage extends StatefulWidget {
@@ -101,6 +102,10 @@ class _HomeContentState extends State<_HomeContent> {
   void initState() {
     super.initState();
     _loadLatest();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      LibraryScope.read(context).checkLibraryUpdates();
+    });
   }
 
   Future<void> _loadLatest() async {
@@ -270,12 +275,11 @@ class _HomeContentState extends State<_HomeContent> {
   }
 
   Future<void> _openManga(MangaItem manga) async {
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => MangaDetailPage(manga: manga),
-      ),
-    );
+    await openMangaOrContinue(context, manga);
+  }
+
+  Future<void> _continueManga(MangaItem manga) async {
+    await openMangaOrContinue(context, manga, preferContinue: true);
   }
 
   Future<void> _clearSearch() async {
@@ -517,6 +521,7 @@ class _HomeContentState extends State<_HomeContent> {
                             latestManga: latestManga,
                             loadingLatest: loadingLatest,
                             onOpen: _openManga,
+                            onContinue: _continueManga,
                             onLibraryToggle: _toggleLibrary,
                         ),
             ),
@@ -531,12 +536,14 @@ class _HomeContentSections extends StatelessWidget {
   final List<MangaItem> latestManga;
   final bool loadingLatest;
   final Future<void> Function(MangaItem) onOpen;
+  final Future<void> Function(MangaItem) onContinue;
   final Future<void> Function(MangaItem) onLibraryToggle;
 
   const _HomeContentSections({
     required this.latestManga,
     required this.loadingLatest,
     required this.onOpen,
+    required this.onContinue,
     required this.onLibraryToggle,
   });
 
@@ -568,7 +575,8 @@ class _HomeContentSections extends StatelessWidget {
 
                 return _HomeMangaTile(
                   manga: manga,
-                  onTap: () => onOpen(manga),
+                  hasUpdate: store.hasUpdate(manga.id),
+                  onTap: () => onContinue(manga),
                 );
               },
             ),
@@ -648,10 +656,12 @@ class _SectionTitle extends StatelessWidget {
 class _HomeMangaTile extends StatelessWidget {
   final MangaItem manga;
   final VoidCallback onTap;
+  final bool hasUpdate;
 
   const _HomeMangaTile({
     required this.manga,
     required this.onTap,
+    this.hasUpdate = false,
   });
 
   @override
@@ -663,6 +673,8 @@ class _HomeMangaTile extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Stack(
+              children: [
             ClipRRect(
               borderRadius: BorderRadius.circular(5),
               child: SizedBox(
@@ -685,6 +697,27 @@ class _HomeMangaTile extends StatelessWidget {
                         cacheWidth: 260,
                       ),
               ),
+            ),
+            if (hasUpdate)
+              Positioned(
+                top: 6,
+                right: 6,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: tomoPink,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Text(
+                    'NEW',
+                    style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ),
+              ],
             ),
             const SizedBox(height: 7),
             Text(

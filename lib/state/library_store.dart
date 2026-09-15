@@ -14,6 +14,7 @@ class LibraryStore extends ChangeNotifier {
   static const _readPrefix = 'tomo_read_';
   static const _pagePrefix = 'tomo_page_';
   static const _lastPrefix = 'tomo_last_';
+  static const _knownCountPrefix = 'tomo_known_count_';
 
   final MangaService _mangaService;
 
@@ -21,7 +22,9 @@ class LibraryStore extends ChangeNotifier {
   List<MangaItem> items = [];
   final Map<String, int> readCounts = {};
   final Set<String> busyIds = <String>{};
+  final Set<String> updatedIds = <String>{};
   bool loaded = false;
+  bool checkingUpdates = false;
 
   Future<SharedPreferences> get _preferences async {
     return _prefs ??= await SharedPreferences.getInstance();
@@ -65,6 +68,10 @@ class LibraryStore extends ChangeNotifier {
             prefs.getStringList('$_readPrefix${manga.id}')?.length ?? 0;
       }
 
+      updatedIds
+        ..clear()
+        ..addAll(prefs.getStringList('tomo_updated_ids') ?? const []);
+
       items = loadedItems;
       readCounts
         ..clear()
@@ -95,7 +102,9 @@ class LibraryStore extends ChangeNotifier {
       if (isInLibrary(manga.id)) {
         items.removeWhere((item) => item.id == manga.id);
         readCounts.remove(manga.id);
+        updatedIds.remove(manga.id);
         await _persistLibrary();
+        await _persistUpdatedIds();
       } else {
         final fullManga = manga.description.isEmpty || manga.cover.isEmpty
             ? await _mangaService.fetchManga(manga.url)
@@ -119,7 +128,9 @@ class LibraryStore extends ChangeNotifier {
     try {
       items.removeWhere((item) => item.id == id);
       readCounts.remove(id);
+      updatedIds.remove(id);
       await _persistLibrary();
+      await _persistUpdatedIds();
     } finally {
       busyIds.remove(id);
       notifyListeners();
@@ -172,5 +183,50 @@ class LibraryStore extends ChangeNotifier {
     final prefs = await _preferences;
     await prefs.setInt('$_pagePrefix${mangaId}_$chapterId', page);
     await prefs.setString('$_lastPrefix$mangaId', chapterId);
+  }
+
+  bool hasUpdate(String id) => updatedIds.contains(id);
+
+  Future<void> rememberChapterCount(String mangaId, int count) async {
+    final prefs = await _preferences;
+    final known = prefs.getInt('$_knownCountPrefix$mangaId');
+    await prefs.setInt('$_knownCountPrefix$mangaId', count);
+    if (known != null && count > known) {
+      updatedIds.add(mangaId);
+    } else {
+      updatedIds.remove(mangaId);
+    }
+    await _persistUpdatedIds();
+    notifyListeners();
+  }
+
+  Future<void> clearUpdate(String mangaId) async {
+    updatedIds.remove(mangaId);
+    await _persistUpdatedIds();
+    notifyListeners();
+  }
+
+  Future<void> _persistUpdatedIds() async {
+    final prefs = await _preferences;
+    await prefs.setStringList('tomo_updated_ids', updatedIds.toList());
+  }
+
+  Future<void> checkLibraryUpdates() async {
+    if (checkingUpdates || items.isEmpty) return;
+    checkingUpdates = true;
+    notifyListeners();
+    try {
+      for (final manga in List<MangaItem>.from(items)) {
+        try {
+          final chapters = await _mangaService.fetchChapters(manga.id);
+          await rememberChapterCount(manga.id, chapters.length);
+        } catch (error) {
+          debugPrint('TOMO update check failed for ${manga.id}: $error');
+        }
+      }
+    } finally {
+      checkingUpdates = false;
+      notifyListeners();
+    }
   }
 }

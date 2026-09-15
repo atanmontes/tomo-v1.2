@@ -137,6 +137,10 @@ class _MangaDetailPageState
         chapters = found;
         loadingChapters = false;
       });
+      await LibraryScope.read(context).rememberChapterCount(
+        widget.manga.id,
+        found.length,
+      );
     } catch (e) {
       if (!mounted) return;
 

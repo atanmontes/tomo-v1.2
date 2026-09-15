@@ -402,6 +402,7 @@ class _LibraryPageState extends State<LibraryPage> {
                           isInLibrary: true,
                           libraryBusy:
                               LibraryScope.of(context).busyIds.contains(manga.id),
+                          hasUpdate: LibraryScope.of(context).hasUpdate(manga.id),
                         ),
                       );
                     },

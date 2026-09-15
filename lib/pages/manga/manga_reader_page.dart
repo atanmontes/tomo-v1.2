@@ -10,8 +10,6 @@ import '../../services/manga/manga_service.dart';
 import '../../state/library_scope.dart';
 import '../../theme/tomo_theme.dart';
 
-enum ReaderMode { paged, webtoon }
-
 class MangaReaderPage extends StatefulWidget {
   final MangaItem manga;
   final ChapterItem chapter;
@@ -36,12 +34,9 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
   String? error;
   int currentPage = 0;
   bool uiVisible = true;
-  ReaderMode mode = ReaderMode.paged;
-  bool _restoring = false;
 
   late ChapterItem activeChapter;
-  PageController pageController = PageController();
-  ScrollController webtoonController = ScrollController();
+  late final PageController pageController;
 
   Timer? _saveTimer;
   Timer? _hideTimer;
@@ -51,7 +46,7 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
   void initState() {
     super.initState();
     activeChapter = widget.chapter;
-    webtoonController.addListener(_onWebtoonScroll);
+    pageController = PageController();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _loadProgressAndChapter();
@@ -63,15 +58,9 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
   void dispose() {
     _saveTimer?.cancel();
     _hideTimer?.cancel();
-    webtoonController.removeListener(_onWebtoonScroll);
     pageController.dispose();
-    webtoonController.dispose();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
-  }
-
-  double _pageExtent(BuildContext context) {
-    return MediaQuery.sizeOf(context).width * 1.4;
   }
 
   void _armHideTimer() {
@@ -108,7 +97,7 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
 
   void _scheduleSaveProgress() {
     _saveTimer?.cancel();
-    _saveTimer = Timer(const Duration(milliseconds: 350), _saveProgressNow);
+    _saveTimer = Timer(const Duration(milliseconds: 250), _saveProgressNow);
   }
 
   Future<void> _saveProgressNow() async {
@@ -141,7 +130,6 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
       final foundImages = await _mangaService.fetchChapterImages(
         activeChapter.id,
       );
-
       if (foundImages.isEmpty) {
         throw Exception('No pages found in this chapter.');
       }
@@ -157,8 +145,8 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
       });
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        _restorePosition(safePage);
+        if (!mounted || !pageController.hasClients) return;
+        pageController.jumpToPage(safePage);
         _precacheNearbyPages(safePage);
       });
     } catch (e) {
@@ -170,60 +158,8 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
     }
   }
 
-  void _restorePosition(int page) {
-    _restoring = true;
-    if (mode == ReaderMode.paged) {
-      if (pageController.hasClients) {
-        pageController.jumpToPage(page);
-      }
-    } else if (webtoonController.hasClients) {
-      final offset = page * _pageExtent(context);
-      final max = webtoonController.position.maxScrollExtent;
-      webtoonController.jumpTo(offset.clamp(0, max));
-    }
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _restoring = false;
-    });
-  }
-
-  void _switchMode() {
-    final page = currentPage;
-    setState(() {
-      mode = mode == ReaderMode.paged ? ReaderMode.webtoon : ReaderMode.paged;
-      uiVisible = true;
-    });
-    _armHideTimer();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      _restorePosition(page);
-    });
-  }
-
-  void _onWebtoonScroll() {
-    if (_restoring || mode != ReaderMode.webtoon || images.isEmpty) return;
-    if (!webtoonController.hasClients) return;
-
-    final extent = _pageExtent(context);
-    if (extent <= 0) return;
-
-    final page = (webtoonController.offset / extent)
-        .floor()
-        .clamp(0, images.length - 1);
-
-    if (page == currentPage) return;
-
-    currentPage = page;
-    _scheduleSaveProgress();
-    _precacheNearbyPages(page);
-
-    if (page >= images.length - 1) {
-      _markChapterAsRead(activeChapter.id);
-    }
-  }
-
   void _precacheNearbyPages(int page) {
     if (!mounted || images.isEmpty) return;
-
     final screenWidth = MediaQuery.sizeOf(context).width;
     final pixelRatio = MediaQuery.devicePixelRatioOf(context);
     final cacheWidth = (screenWidth * pixelRatio * 1.25).round();
@@ -279,8 +215,7 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
   }
 
   Future<void> _goToPreviousPage() async {
-    if (mode != ReaderMode.paged || currentPage <= 0) return;
-    if (!pageController.hasClients) return;
+    if (currentPage <= 0 || !pageController.hasClients) return;
     pageController.previousPage(
       duration: const Duration(milliseconds: 140),
       curve: Curves.easeOut,
@@ -288,8 +223,7 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
   }
 
   Future<void> _goToNextPage() async {
-    if (mode != ReaderMode.paged || currentPage >= images.length - 1) return;
-    if (!pageController.hasClients) return;
+    if (currentPage >= images.length - 1 || !pageController.hasClients) return;
     pageController.nextPage(
       duration: const Duration(milliseconds: 140),
       curve: Curves.easeOut,
@@ -354,19 +288,6 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
                   ),
                 ],
               ),
-              actions: [
-                IconButton(
-                  tooltip: mode == ReaderMode.paged
-                      ? 'Webtoon mode'
-                      : 'Page mode',
-                  onPressed: _switchMode,
-                  icon: Icon(
-                    mode == ReaderMode.paged
-                        ? Icons.view_day_outlined
-                        : Icons.auto_stories_outlined,
-                  ),
-                ),
-              ],
             )
           : null,
       body: progressLoading || loading
@@ -387,10 +308,79 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
                     )
                   : Stack(
                       children: [
-                        mode == ReaderMode.paged
-                            ? _buildPageMode()
-                            : _buildWebtoonMode(),
-                        if (uiVisible && mode == ReaderMode.paged)
+                        PageView.builder(
+                          controller: pageController,
+                          itemCount: images.length,
+                          allowImplicitScrolling: true,
+                          onPageChanged: (index) {
+                            if (currentPage == index) return;
+                            setState(() => currentPage = index);
+                            _scheduleSaveProgress();
+                            _precacheNearbyPages(index);
+                            if (index == images.length - 1) {
+                              _markChapterAsRead(activeChapter.id);
+                            }
+                          },
+                          itemBuilder: (context, index) {
+                            final cacheWidth =
+                                (MediaQuery.sizeOf(context).width *
+                                        MediaQuery.devicePixelRatioOf(context) *
+                                        1.25)
+                                    .round();
+
+                            return GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onTapUp: (details) {
+                                _onPagedTap(
+                                  details.localPosition,
+                                  MediaQuery.sizeOf(context),
+                                );
+                              },
+                              child: InteractiveViewer(
+                                minScale: 1,
+                                maxScale: 4,
+                                child: Center(
+                                  child: Image.network(
+                                    images[index],
+                                    fit: BoxFit.contain,
+                                    width: double.infinity,
+                                    height: double.infinity,
+                                    cacheWidth: cacheWidth,
+                                    filterQuality: FilterQuality.medium,
+                                    gaplessPlayback: true,
+                                    headers: weebCentralImageHeaders,
+                                    frameBuilder: (
+                                      context,
+                                      child,
+                                      frame,
+                                      wasSynchronouslyLoaded,
+                                    ) {
+                                      if (wasSynchronouslyLoaded ||
+                                          frame != null) {
+                                        return child;
+                                      }
+                                      return const Center(
+                                        child: CircularProgressIndicator(
+                                          color: tomoPink,
+                                        ),
+                                      );
+                                    },
+                                    errorBuilder: (_, __, ___) {
+                                      return const Center(
+                                        child: Icon(
+                                          Icons.broken_image_outlined,
+                                          color: Colors.white24,
+                                          size: 50,
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                        if (uiVisible)
                           Positioned(
                             left: 16,
                             right: 16,
@@ -405,195 +395,6 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
                           ),
                       ],
                     ),
-    );
-  }
-
-  Widget _buildPageMode() {
-    return PageView.builder(
-      controller: pageController,
-      itemCount: images.length,
-      allowImplicitScrolling: true,
-      onPageChanged: (index) {
-        if (currentPage == index) return;
-        setState(() => currentPage = index);
-        _scheduleSaveProgress();
-        _precacheNearbyPages(index);
-        if (index == images.length - 1) {
-          _markChapterAsRead(activeChapter.id);
-        }
-      },
-      itemBuilder: (context, index) {
-        final cacheWidth =
-            (MediaQuery.sizeOf(context).width *
-                    MediaQuery.devicePixelRatioOf(context) *
-                    1.25)
-                .round();
-
-        return GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTapUp: (details) {
-            _onPagedTap(details.localPosition, MediaQuery.sizeOf(context));
-          },
-          child: InteractiveViewer(
-            minScale: 1,
-            maxScale: 4,
-            child: Center(
-              child: Image.network(
-                images[index],
-                fit: BoxFit.contain,
-                width: double.infinity,
-                height: double.infinity,
-                cacheWidth: cacheWidth,
-                filterQuality: FilterQuality.medium,
-                gaplessPlayback: true,
-                headers: weebCentralImageHeaders,
-                frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
-                  if (wasSynchronouslyLoaded || frame != null) return child;
-                  return const Center(
-                    child: CircularProgressIndicator(color: tomoPink),
-                  );
-                },
-                errorBuilder: (_, __, ___) {
-                  return const Center(
-                    child: Icon(
-                      Icons.broken_image_outlined,
-                      color: Colors.white24,
-                      size: 50,
-                    ),
-                  );
-                },
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildWebtoonMode() {
-    final next = _nextChapter;
-    final minHeight = _pageExtent(context);
-
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: _toggleUi,
-      child: ListView.builder(
-        controller: webtoonController,
-        cacheExtent: minHeight * 4,
-        itemCount: images.length + 1,
-        itemBuilder: (context, index) {
-          if (index == images.length) {
-            return _WebtoonChapterFooter(
-              hasNext: next != null,
-              nextTitle: next?.title,
-              onNext: next == null ? null : _goToNextChapter,
-            );
-          }
-
-          return _WebtoonImage(
-            url: images[index],
-            minHeight: minHeight,
-          );
-        },
-      ),
-    );
-  }
-}
-
-class _WebtoonImage extends StatelessWidget {
-  final String url;
-  final double minHeight;
-
-  const _WebtoonImage({
-    required this.url,
-    required this.minHeight,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return ConstrainedBox(
-      constraints: BoxConstraints(minHeight: minHeight),
-      child: Image.network(
-        url,
-        fit: BoxFit.fitWidth,
-        width: double.infinity,
-        filterQuality: FilterQuality.medium,
-        gaplessPlayback: true,
-        headers: weebCentralImageHeaders,
-        loadingBuilder: (context, child, progress) {
-          if (progress == null) return child;
-          return SizedBox(
-            height: minHeight,
-            child: const Center(
-              child: CircularProgressIndicator(color: tomoPink),
-            ),
-          );
-        },
-        errorBuilder: (_, __, ___) {
-          return SizedBox(
-            height: minHeight,
-            child: const Center(
-              child: Icon(
-                Icons.broken_image_outlined,
-                color: Colors.white24,
-                size: 42,
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-}
-
-class _WebtoonChapterFooter extends StatelessWidget {
-  final bool hasNext;
-  final String? nextTitle;
-  final VoidCallback? onNext;
-
-  const _WebtoonChapterFooter({
-    required this.hasNext,
-    required this.nextTitle,
-    required this.onNext,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 28, 20, 48),
-      child: Column(
-        children: [
-          const Text(
-            'End of chapter',
-            style: TextStyle(
-              color: Colors.white54,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 14),
-          if (hasNext)
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: FilledButton.icon(
-                onPressed: onNext,
-                style: FilledButton.styleFrom(backgroundColor: tomoPink),
-                icon: const Icon(Icons.skip_next_rounded),
-                label: Text(
-                  nextTitle == null || nextTitle!.isEmpty
-                      ? 'Next chapter'
-                      : 'Next — $nextTitle',
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            )
-          else
-            const Text(
-              'No more chapters.',
-              style: TextStyle(color: Colors.white38),
-            ),
-        ],
-      ),
     );
   }
 }

@@ -11,6 +11,7 @@ class MangaCard extends StatelessWidget {
   final bool isInLibrary;
   final bool libraryBusy;
   final bool showAuthor;
+  final bool hasUpdate;
 
   const MangaCard({
     super.key,
@@ -20,6 +21,7 @@ class MangaCard extends StatelessWidget {
     required this.isInLibrary,
     this.libraryBusy = false,
     this.showAuthor = true,
+    this.hasUpdate = false,
   });
 
   String get _authorText {
@@ -43,6 +45,8 @@ class MangaCard extends StatelessWidget {
           height: 96,
           child: Row(
             children: [
+              Stack(
+                children: [
               ClipRRect(
                 borderRadius: const BorderRadius.only(
                   topLeft: Radius.circular(5),
@@ -65,6 +69,21 @@ class MangaCard extends StatelessWidget {
                                   .round(),
                         ),
                 ),
+              ),
+              if (hasUpdate)
+                Positioned(
+                  top: 6,
+                  left: 6,
+                  child: Container(
+                    width: 8,
+                    height: 8,
+                    decoration: const BoxDecoration(
+                      color: tomoPink,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                ),
+                ],
               ),
               Expanded(
                 child: Padding(

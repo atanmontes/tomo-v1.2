@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../../models/manga/manga.dart';
 import '../../state/library_scope.dart';
 import '../../theme/tomo_theme.dart';
-import '../../widgets/manga/manga_card.dart';
 import '../../widgets/manga/tomo_network_image.dart';
 import 'settings/settings_page.dart';
 import 'manga/manga_detail_page.dart';
@@ -43,19 +42,17 @@ class _LibraryPageState extends State<LibraryPage> {
       TextEditingController();
 
   String search = '';
-  bool _gridView = true;
-  _LibraryProgressFilter _progressFilter = _LibraryProgressFilter.all;
+
+  _LibraryProgressFilter _progressFilter =
+      _LibraryProgressFilter.all;
+
   _LibrarySort _sort = _LibrarySort.progress;
+
   String _statusFilter = 'Any';
   String _typeFilter = 'Any';
   String _officialFilter = 'Any';
   String _animeFilter = 'Any';
   String _adultFilter = 'Any';
-
-  @override
-  void initState() {
-    super.initState();
-  }
 
   @override
   void dispose() {
@@ -64,10 +61,6 @@ class _LibraryPageState extends State<LibraryPage> {
   }
 
   List<MangaItem> get library => LibraryScope.of(context).items;
-
-  Future<void> _toggleLibrary(MangaItem manga) async {
-    await LibraryScope.read(context).remove(manga.id);
-  }
 
   Future<void> _openManga(MangaItem manga) async {
     await Navigator.push(
@@ -78,7 +71,6 @@ class _LibraryPageState extends State<LibraryPage> {
         ),
       ),
     );
-
   }
 
   bool _hasProgress(MangaItem manga) {
@@ -91,26 +83,31 @@ class _LibraryPageState extends State<LibraryPage> {
     final result = library.where((manga) {
       final progress = _hasProgress(manga);
 
-      if (_progressFilter == _LibraryProgressFilter.inProgress && !progress) {
+      if (_progressFilter == _LibraryProgressFilter.inProgress &&
+          !progress) {
         return false;
       }
 
-      if (_progressFilter == _LibraryProgressFilter.notStarted && progress) {
+      if (_progressFilter == _LibraryProgressFilter.notStarted &&
+          progress) {
         return false;
       }
 
       if (_statusFilter != 'Any' &&
-          manga.status.toLowerCase() != _statusFilter.toLowerCase()) {
+          manga.status.toLowerCase() !=
+              _statusFilter.toLowerCase()) {
         return false;
       }
 
       if (_typeFilter != 'Any' &&
-          manga.type.toLowerCase() != _typeFilter.toLowerCase()) {
+          manga.type.toLowerCase() !=
+              _typeFilter.toLowerCase()) {
         return false;
       }
 
       if (_officialFilter != 'Any' &&
-          (manga.officialTranslation != (_officialFilter == 'True'))) {
+          (manga.officialTranslation !=
+              (_officialFilter == 'True'))) {
         return false;
       }
 
@@ -140,12 +137,24 @@ class _LibraryPageState extends State<LibraryPage> {
         case _LibrarySort.progress:
           final aProgress = _hasProgress(a);
           final bProgress = _hasProgress(b);
-          if (aProgress != bProgress) return aProgress ? -1 : 1;
-          return a.title.toLowerCase().compareTo(b.title.toLowerCase());
+
+          if (aProgress != bProgress) {
+            return aProgress ? -1 : 1;
+          }
+
+          return a.title
+              .toLowerCase()
+              .compareTo(b.title.toLowerCase());
+
         case _LibrarySort.titleAsc:
-          return a.title.toLowerCase().compareTo(b.title.toLowerCase());
+          return a.title
+              .toLowerCase()
+              .compareTo(b.title.toLowerCase());
+
         case _LibrarySort.titleDesc:
-          return b.title.toLowerCase().compareTo(a.title.toLowerCase());
+          return b.title
+              .toLowerCase()
+              .compareTo(a.title.toLowerCase());
       }
     });
 
@@ -154,21 +163,40 @@ class _LibraryPageState extends State<LibraryPage> {
 
   String get _filterLabel {
     final parts = <String>[];
+
     switch (_progressFilter) {
       case _LibraryProgressFilter.all:
         break;
+
       case _LibraryProgressFilter.inProgress:
         parts.add('In Progress');
         break;
+
       case _LibraryProgressFilter.notStarted:
         parts.add('Not Started');
         break;
     }
-    if (_statusFilter != 'Any') parts.add(_statusFilter);
-    if (_typeFilter != 'Any') parts.add(_typeFilter);
-    if (_officialFilter != 'Any') parts.add('Official $_officialFilter');
-    if (_animeFilter != 'Any') parts.add('Anime $_animeFilter');
-    if (_adultFilter != 'Any') parts.add('Adult $_adultFilter');
+
+    if (_statusFilter != 'Any') {
+      parts.add(_statusFilter);
+    }
+
+    if (_typeFilter != 'Any') {
+      parts.add(_typeFilter);
+    }
+
+    if (_officialFilter != 'Any') {
+      parts.add('Official $_officialFilter');
+    }
+
+    if (_animeFilter != 'Any') {
+      parts.add('Anime $_animeFilter');
+    }
+
+    if (_adultFilter != 'Any') {
+      parts.add('Adult $_adultFilter');
+    }
+
     return parts.isEmpty ? 'All' : parts.join(' • ');
   }
 
@@ -181,7 +209,8 @@ class _LibraryPageState extends State<LibraryPage> {
       _adultFilter != 'Any';
 
   Future<void> _openLibraryFilters() async {
-    final selected = await showModalBottomSheet<_LibraryFilterSelection>(
+    final selected =
+        await showModalBottomSheet<_LibraryFilterSelection>(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
@@ -211,6 +240,42 @@ class _LibraryPageState extends State<LibraryPage> {
     });
   }
 
+  Future<void> _removeFromLibrary(MangaItem manga) async {
+    final shouldRemove = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          backgroundColor: tomoCard,
+          title: const Text('Remove from Library?'),
+          content: Text(
+            'Remove "${manga.title}" from your library?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(dialogContext, false);
+              },
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.pop(dialogContext, true);
+              },
+              style: FilledButton.styleFrom(
+                backgroundColor: tomoPink,
+              ),
+              child: const Text('Remove'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (shouldRemove != true || !mounted) return;
+
+    await LibraryScope.read(context).remove(manga.id);
+  }
+
   @override
   Widget build(BuildContext context) {
     final mangas = filteredLibrary;
@@ -228,18 +293,13 @@ class _LibraryPageState extends State<LibraryPage> {
         ),
         actions: [
           IconButton(
-            tooltip: _gridView ? 'List view' : 'Grid view',
-            onPressed: () => setState(() => _gridView = !_gridView),
-            icon: Icon(
-              _gridView ? Icons.view_list_rounded : Icons.grid_view_rounded,
-            ),
-          ),
-          IconButton(
             tooltip: 'Settings',
             onPressed: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (_) => const SettingsPage()),
+                MaterialPageRoute(
+                  builder: (_) => const SettingsPage(),
+                ),
               );
             },
             icon: const Icon(Icons.settings_outlined),
@@ -303,6 +363,7 @@ class _LibraryPageState extends State<LibraryPage> {
                           ? IconButton(
                               onPressed: () {
                                 _searchController.clear();
+
                                 setState(() {
                                   search = '';
                                 });
@@ -398,28 +459,7 @@ class _LibraryPageState extends State<LibraryPage> {
                       ),
                     ),
                   )
-                : _gridView
-                    ? GridView.builder(
-                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
-                        gridDelegate:
-                            const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 3,
-                          mainAxisSpacing: 14,
-                          crossAxisSpacing: 10,
-                          childAspectRatio: 0.56,
-                        ),
-                        itemCount: mangas.length,
-                        itemBuilder: (context, index) {
-                          final manga = mangas[index];
-                          return _LibraryGridTile(
-                            manga: manga,
-                            hasUpdate: LibraryScope.of(context)
-                                .hasUpdate(manga.id),
-                            onTap: () => _openManga(manga),
-                          );
-                        },
-                      )
-                    : ListView.separated(
+                : GridView.builder(
                     padding: const EdgeInsets.fromLTRB(
                       16,
                       4,
@@ -427,24 +467,23 @@ class _LibraryPageState extends State<LibraryPage> {
                       24,
                     ),
                     cacheExtent: 500,
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 3,
+                      mainAxisSpacing: 18,
+                      crossAxisSpacing: 12,
+                      mainAxisExtent: 215,
+                    ),
                     itemCount: mangas.length,
-                    separatorBuilder: (_, __) =>
-                        const SizedBox(height: 10),
                     itemBuilder: (context, index) {
                       final manga = mangas[index];
 
-                      return RepaintBoundary(
-                        child: MangaCard(
-                          manga: manga,
-                          onTap: () => _openManga(manga),
-                          onLibraryToggle: () {
-                            _toggleLibrary(manga);
-                          },
-                          isInLibrary: true,
-                          libraryBusy:
-                              LibraryScope.of(context).busyIds.contains(manga.id),
-                          hasUpdate: LibraryScope.of(context).hasUpdate(manga.id),
-                        ),
+                      return _LibraryGridTile(
+                        manga: manga,
+                        hasUpdate: LibraryScope.of(context)
+                            .hasUpdate(manga.id),
+                        onTap: () => _openManga(manga),
+                        onRemove: () => _removeFromLibrary(manga),
                       );
                     },
                   ),
@@ -455,56 +494,47 @@ class _LibraryPageState extends State<LibraryPage> {
   }
 }
 
-class _LibraryFiltersSheet extends StatefulWidget {
-  final _LibraryFilterSelection initial;
-
-  const _LibraryFiltersSheet({required this.initial});
-
-  @override
-  State<_LibraryFiltersSheet> createState() => _LibraryFiltersSheetState();
-}
-
-
 class _LibraryGridTile extends StatelessWidget {
   final MangaItem manga;
   final bool hasUpdate;
   final VoidCallback onTap;
+  final VoidCallback onRemove;
 
   const _LibraryGridTile({
     required this.manga,
     required this.hasUpdate,
     required this.onTap,
+    required this.onRemove,
   });
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
+      onLongPress: onRemove,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
+          AspectRatio(
+            aspectRatio: 2 / 3,
             child: Stack(
               children: [
                 Positioned.fill(
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(14),
-                    child: manga.cover.isEmpty
-                        ? Container(
-                            color: tomoCard,
-                            child: const Icon(
-                              Icons.menu_book_rounded,
-                              color: Colors.white24,
-                            ),
-                          )
-                        : TomoNetworkImage(
-                            url: manga.cover,
-                            fit: BoxFit.cover,
-                            width: 400,
-                            height: 600,
-                            cacheWidth: 360,
+                  child: manga.cover.isEmpty
+                      ? Container(
+                          color: tomoCard,
+                          child: const Icon(
+                            Icons.menu_book_rounded,
+                            color: Colors.white24,
                           ),
-                  ),
+                        )
+                      : TomoNetworkImage(
+                          url: manga.cover,
+                          fit: BoxFit.cover,
+                          width: 400,
+                          height: 600,
+                          cacheWidth: 360,
+                        ),
                 ),
                 if (hasUpdate)
                   Positioned(
@@ -531,15 +561,18 @@ class _LibraryGridTile extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: 6),
-          Text(
-            manga.title,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              height: 1.15,
+          const SizedBox(height: 8),
+          SizedBox(
+            height: 34,
+            child: Text(
+              manga.title,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                height: 1.15,
+              ),
             ),
           ),
         ],
@@ -548,9 +581,25 @@ class _LibraryGridTile extends StatelessWidget {
   }
 }
 
-class _LibraryFiltersSheetState extends State<_LibraryFiltersSheet> {
-  late _LibraryProgressFilter progress = widget.initial.progress;
+class _LibraryFiltersSheet extends StatefulWidget {
+  final _LibraryFilterSelection initial;
+
+  const _LibraryFiltersSheet({
+    required this.initial,
+  });
+
+  @override
+  State<_LibraryFiltersSheet> createState() =>
+      _LibraryFiltersSheetState();
+}
+
+class _LibraryFiltersSheetState
+    extends State<_LibraryFiltersSheet> {
+  late _LibraryProgressFilter progress =
+      widget.initial.progress;
+
   late _LibrarySort sort = widget.initial.sort;
+
   late String status = widget.initial.status;
   late String type = widget.initial.type;
   late String official = widget.initial.official;
@@ -588,18 +637,30 @@ class _LibraryFiltersSheetState extends State<_LibraryFiltersSheet> {
   Widget build(BuildContext context) {
     return SafeArea(
       child: Container(
-        margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        margin: const EdgeInsets.fromLTRB(
+          12,
+          0,
+          12,
+          12,
+        ),
         constraints: BoxConstraints(
-          maxHeight: MediaQuery.sizeOf(context).height * 0.9,
+          maxHeight:
+              MediaQuery.sizeOf(context).height * 0.9,
         ),
         decoration: BoxDecoration(
           color: tomoCard,
           borderRadius: BorderRadius.circular(22),
         ),
         child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(18, 14, 18, 20),
+          padding: const EdgeInsets.fromLTRB(
+            18,
+            14,
+            18,
+            20,
+          ),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment:
+                CrossAxisAlignment.start,
             children: [
               Center(
                 child: Container(
@@ -607,7 +668,8 @@ class _LibraryFiltersSheetState extends State<_LibraryFiltersSheet> {
                   height: 4,
                   decoration: BoxDecoration(
                     color: Colors.white24,
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius:
+                        BorderRadius.circular(10),
                   ),
                 ),
               ),
@@ -630,7 +692,10 @@ class _LibraryFiltersSheetState extends State<_LibraryFiltersSheet> {
                 ],
               ),
               const SizedBox(height: 12),
-              const Text('Reading Progress', style: _filterHeadingStyle),
+              const Text(
+                'Reading Progress',
+                style: _filterHeadingStyle,
+              ),
               const SizedBox(height: 8),
               _ChoiceWrap<_LibraryProgressFilter>(
                 values: const [
@@ -641,13 +706,19 @@ class _LibraryFiltersSheetState extends State<_LibraryFiltersSheet> {
                 selected: progress,
                 label: (value) => switch (value) {
                   _LibraryProgressFilter.all => 'All',
-                  _LibraryProgressFilter.inProgress => 'In Progress',
-                  _LibraryProgressFilter.notStarted => 'Not Started',
+                  _LibraryProgressFilter.inProgress =>
+                    'In Progress',
+                  _LibraryProgressFilter.notStarted =>
+                    'Not Started',
                 },
-                onChanged: (value) => setState(() => progress = value),
+                onChanged: (value) =>
+                    setState(() => progress = value),
               ),
               const SizedBox(height: 18),
-              const Text('Sort By', style: _filterHeadingStyle),
+              const Text(
+                'Sort By',
+                style: _filterHeadingStyle,
+              ),
               const SizedBox(height: 8),
               _ChoiceWrap<_LibrarySort>(
                 values: const [
@@ -657,42 +728,73 @@ class _LibraryFiltersSheetState extends State<_LibraryFiltersSheet> {
                 ],
                 selected: sort,
                 label: (value) => switch (value) {
-                  _LibrarySort.progress => 'Progress First',
+                  _LibrarySort.progress =>
+                    'Progress First',
                   _LibrarySort.titleAsc => 'Title A–Z',
                   _LibrarySort.titleDesc => 'Title Z–A',
                 },
-                onChanged: (value) => setState(() => sort = value),
+                onChanged: (value) =>
+                    setState(() => sort = value),
               ),
               const SizedBox(height: 18),
               _LibrarySheetSelect(
                 label: 'Series Status',
                 value: status,
-                values: const ['Any', 'Ongoing', 'Complete', 'Hiatus', 'Canceled'],
-                onChanged: (value) => setState(() => status = value),
+                values: const [
+                  'Any',
+                  'Ongoing',
+                  'Complete',
+                  'Hiatus',
+                  'Canceled',
+                ],
+                onChanged: (value) =>
+                    setState(() => status = value),
               ),
               _LibrarySheetSelect(
                 label: 'Series Type',
                 value: type,
-                values: const ['Any', 'Manga', 'Manhwa', 'Manhua', 'OEL'],
-                onChanged: (value) => setState(() => type = value),
+                values: const [
+                  'Any',
+                  'Manga',
+                  'Manhwa',
+                  'Manhua',
+                  'OEL',
+                ],
+                onChanged: (value) =>
+                    setState(() => type = value),
               ),
               _LibrarySheetSelect(
                 label: 'Official Translation',
                 value: official,
-                values: const ['Any', 'True', 'False'],
-                onChanged: (value) => setState(() => official = value),
+                values: const [
+                  'Any',
+                  'True',
+                  'False',
+                ],
+                onChanged: (value) =>
+                    setState(() => official = value),
               ),
               _LibrarySheetSelect(
                 label: 'Anime Adaptation',
                 value: anime,
-                values: const ['Any', 'True', 'False'],
-                onChanged: (value) => setState(() => anime = value),
+                values: const [
+                  'Any',
+                  'True',
+                  'False',
+                ],
+                onChanged: (value) =>
+                    setState(() => anime = value),
               ),
               _LibrarySheetSelect(
                 label: 'Adult Content',
                 value: adult,
-                values: const ['Any', 'True', 'False'],
-                onChanged: (value) => setState(() => adult = value),
+                values: const [
+                  'Any',
+                  'True',
+                  'False',
+                ],
+                onChanged: (value) =>
+                    setState(() => adult = value),
               ),
               const SizedBox(height: 10),
               SizedBox(
@@ -700,10 +802,14 @@ class _LibraryFiltersSheetState extends State<_LibraryFiltersSheet> {
                 height: 50,
                 child: FilledButton(
                   onPressed: _apply,
-                  style: FilledButton.styleFrom(backgroundColor: tomoPink),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: tomoPink,
+                  ),
                   child: const Text(
                     'Apply Filters',
-                    style: TextStyle(fontWeight: FontWeight.w800),
+                    style: TextStyle(
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 ),
               ),
@@ -740,19 +846,29 @@ class _ChoiceWrap<T> extends StatelessWidget {
       runSpacing: 8,
       children: values.map((value) {
         final active = value == selected;
+
         return Material(
-          color: active ? tomoPink.withOpacity(0.16) : tomoBackground,
+          color: active
+              ? tomoPink.withOpacity(0.16)
+              : tomoBackground,
           borderRadius: BorderRadius.circular(12),
           child: InkWell(
             onTap: () => onChanged(value),
             borderRadius: BorderRadius.circular(12),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 10,
+              ),
               child: Text(
                 label(value),
                 style: TextStyle(
-                  color: active ? tomoPink : Colors.white70,
-                  fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+                  color: active
+                      ? tomoPink
+                      : Colors.white70,
+                  fontWeight: active
+                      ? FontWeight.w700
+                      : FontWeight.w500,
                 ),
               ),
             ),
@@ -777,7 +893,8 @@ class _LibrarySheetSelect extends StatelessWidget {
   });
 
   Future<void> _open(BuildContext context) async {
-    final result = await showModalBottomSheet<String>(
+    final result =
+        await showModalBottomSheet<String>(
       context: context,
       backgroundColor: Colors.transparent,
       builder: (_) => _ChoiceSheet(
@@ -786,7 +903,10 @@ class _LibrarySheetSelect extends StatelessWidget {
         values: values,
       ),
     );
-    if (result != null) onChanged(result);
+
+    if (result != null) {
+      onChanged(result);
+    }
   }
 
   @override
@@ -800,20 +920,40 @@ class _LibrarySheetSelect extends StatelessWidget {
           onTap: () => _open(context),
           borderRadius: BorderRadius.circular(14),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(14, 10, 12, 10),
+            padding: const EdgeInsets.fromLTRB(
+              14,
+              10,
+              12,
+              10,
+            ),
             child: Row(
               children: [
                 Expanded(
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                    crossAxisAlignment:
+                        CrossAxisAlignment.start,
                     children: [
-                      Text(label, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                      Text(
+                        label,
+                        style: const TextStyle(
+                          color: Colors.white54,
+                          fontSize: 12,
+                        ),
+                      ),
                       const SizedBox(height: 3),
-                      Text(value, style: const TextStyle(fontWeight: FontWeight.w600)),
+                      Text(
+                        value,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ],
                   ),
                 ),
-                const Icon(Icons.keyboard_arrow_down_rounded, color: Colors.white54),
+                const Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  color: Colors.white54,
+                ),
               ],
             ),
           ),
@@ -838,37 +978,77 @@ class _ChoiceSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     return SafeArea(
       child: Container(
-        margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        margin: const EdgeInsets.fromLTRB(
+          12,
+          0,
+          12,
+          12,
+        ),
         decoration: BoxDecoration(
           color: tomoCard,
           borderRadius: BorderRadius.circular(22),
         ),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(18, 14, 18, 10),
+          padding: const EdgeInsets.fromLTRB(
+            18,
+            14,
+            18,
+            10,
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(width: 38, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(10))),
+              Container(
+                width: 38,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.white24,
+                  borderRadius:
+                      BorderRadius.circular(10),
+                ),
+              ),
               const SizedBox(height: 14),
               Align(
                 alignment: Alignment.centerLeft,
-                child: Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
               ),
               const SizedBox(height: 8),
               ...values.map((item) {
                 final selected = item == value;
+
                 return Material(
-                  color: selected ? tomoPink.withOpacity(0.12) : Colors.transparent,
-                  borderRadius: BorderRadius.circular(14),
+                  color: selected
+                      ? tomoPink.withOpacity(0.12)
+                      : Colors.transparent,
+                  borderRadius:
+                      BorderRadius.circular(14),
                   child: InkWell(
-                    onTap: () => Navigator.pop(context, item),
-                    borderRadius: BorderRadius.circular(14),
+                    onTap: () =>
+                        Navigator.pop(context, item),
+                    borderRadius:
+                        BorderRadius.circular(14),
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                      padding:
+                          const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 12,
+                      ),
                       child: Row(
                         children: [
-                          Expanded(child: Text(item)),
-                          if (selected) const Icon(Icons.check_rounded, color: tomoPink),
+                          Expanded(
+                            child: Text(item),
+                          ),
+                          if (selected)
+                            const Icon(
+                              Icons.check_rounded,
+                              color: tomoPink,
+                            ),
                         ],
                       ),
                     ),

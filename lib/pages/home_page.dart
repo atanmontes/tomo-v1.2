@@ -9,10 +9,8 @@ import '../state/library_scope.dart';
 import '../theme/tomo_theme.dart';
 import '../widgets/manga/manga_card.dart';
 import '../widgets/manga/tomo_network_image.dart';
-import 'manga/manga_detail_page.dart';
 import 'manga/reader_launcher.dart';
 import 'library_page.dart';
-import 'settings/settings_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -328,46 +326,28 @@ class _HomeContentState extends State<_HomeContent> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: 4),
-            Row(
-              children: [
-                Expanded(
-                  child: RichText(
-                    text: const TextSpan(
-                      style: TextStyle(fontSize: 34),
-                      children: [
-                        TextSpan(
-                          text: 'TOM',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: -1.8,
-                            color: Colors.white,
-                          ),
-                        ),
-                        TextSpan(
-                          text: 'O',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: -1.8,
-                            color: tomoPink,
-                          ),
-                        ),
-                      ],
+            RichText(
+              text: const TextSpan(
+                style: TextStyle(fontSize: 36),
+                children: [
+                  TextSpan(
+                    text: 'TOM',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: -2,
+                      color: Colors.white,
                     ),
                   ),
-                ),
-                IconButton(
-                  tooltip: 'Settings',
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const SettingsPage(),
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.settings_outlined),
-                ),
-              ],
+                  TextSpan(
+                    text: 'O',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: -2,
+                      color: tomoPink,
+                    ),
+                  ),
+                ],
+              ),
             ),
             const Text(
               'Find your next manga',
@@ -668,13 +648,23 @@ class _SectionTitle extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Icon(icon, color: tomoPink, size: 20),
-        const SizedBox(width: 8),
+        Container(
+          width: 3,
+          height: 16,
+          decoration: BoxDecoration(
+            color: tomoPink,
+            borderRadius: BorderRadius.circular(99),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Icon(icon, color: tomoPink, size: 18),
+        const SizedBox(width: 6),
         Text(
           title,
           style: const TextStyle(
-            fontSize: 19,
+            fontSize: 18,
             fontWeight: FontWeight.w800,
+            letterSpacing: -0.3,
           ),
         ),
       ],
@@ -705,7 +695,7 @@ class _HomeMangaTile extends StatelessWidget {
             Stack(
               children: [
             ClipRRect(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(14),
               child: SizedBox(
                 width: 122,
                 height: 168,

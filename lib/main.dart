@@ -24,15 +24,7 @@ class TomoApp extends StatelessWidget {
       child: MaterialApp(
         debugShowCheckedModeBanner: false,
         title: 'TOMO',
-        theme: ThemeData(
-          brightness: Brightness.dark,
-          scaffoldBackgroundColor: tomoBackground,
-          colorScheme: ColorScheme.fromSeed(
-            seedColor: tomoPink,
-            brightness: Brightness.dark,
-          ),
-          useMaterial3: true,
-        ),
+        theme: tomoTheme(),
         home: const HomePage(),
       ),
     );

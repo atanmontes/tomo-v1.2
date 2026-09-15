@@ -4,6 +4,8 @@ import '../../models/manga/manga.dart';
 import '../../state/library_scope.dart';
 import '../../theme/tomo_theme.dart';
 import '../../widgets/manga/manga_card.dart';
+import '../../widgets/manga/tomo_network_image.dart';
+import 'settings/settings_page.dart';
 import 'manga/manga_detail_page.dart';
 
 enum _LibraryProgressFilter { all, inProgress, notStarted }
@@ -41,6 +43,7 @@ class _LibraryPageState extends State<LibraryPage> {
       TextEditingController();
 
   String search = '';
+  bool _gridView = true;
   _LibraryProgressFilter _progressFilter = _LibraryProgressFilter.all;
   _LibrarySort _sort = _LibrarySort.progress;
   String _statusFilter = 'Any';
@@ -224,6 +227,23 @@ class _LibraryPageState extends State<LibraryPage> {
           ),
         ),
         actions: [
+          IconButton(
+            tooltip: _gridView ? 'List view' : 'Grid view',
+            onPressed: () => setState(() => _gridView = !_gridView),
+            icon: Icon(
+              _gridView ? Icons.view_list_rounded : Icons.grid_view_rounded,
+            ),
+          ),
+          IconButton(
+            tooltip: 'Settings',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const SettingsPage()),
+              );
+            },
+            icon: const Icon(Icons.settings_outlined),
+          ),
           Padding(
             padding: const EdgeInsets.only(right: 8),
             child: Material(
@@ -378,7 +398,28 @@ class _LibraryPageState extends State<LibraryPage> {
                       ),
                     ),
                   )
-                : ListView.separated(
+                : _gridView
+                    ? GridView.builder(
+                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 3,
+                          mainAxisSpacing: 14,
+                          crossAxisSpacing: 10,
+                          childAspectRatio: 0.56,
+                        ),
+                        itemCount: mangas.length,
+                        itemBuilder: (context, index) {
+                          final manga = mangas[index];
+                          return _LibraryGridTile(
+                            manga: manga,
+                            hasUpdate: LibraryScope.of(context)
+                                .hasUpdate(manga.id),
+                            onTap: () => _openManga(manga),
+                          );
+                        },
+                      )
+                    : ListView.separated(
                     padding: const EdgeInsets.fromLTRB(
                       16,
                       4,
@@ -414,7 +455,6 @@ class _LibraryPageState extends State<LibraryPage> {
   }
 }
 
-
 class _LibraryFiltersSheet extends StatefulWidget {
   final _LibraryFilterSelection initial;
 
@@ -422,6 +462,90 @@ class _LibraryFiltersSheet extends StatefulWidget {
 
   @override
   State<_LibraryFiltersSheet> createState() => _LibraryFiltersSheetState();
+}
+
+
+class _LibraryGridTile extends StatelessWidget {
+  final MangaItem manga;
+  final bool hasUpdate;
+  final VoidCallback onTap;
+
+  const _LibraryGridTile({
+    required this.manga,
+    required this.hasUpdate,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(14),
+                    child: manga.cover.isEmpty
+                        ? Container(
+                            color: tomoCard,
+                            child: const Icon(
+                              Icons.menu_book_rounded,
+                              color: Colors.white24,
+                            ),
+                          )
+                        : TomoNetworkImage(
+                            url: manga.cover,
+                            fit: BoxFit.cover,
+                            width: 400,
+                            height: 600,
+                            cacheWidth: 360,
+                          ),
+                  ),
+                ),
+                if (hasUpdate)
+                  Positioned(
+                    top: 6,
+                    right: 6,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: tomoPink,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Text(
+                        'NEW',
+                        style: TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            manga.title,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              height: 1.15,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _LibraryFiltersSheetState extends State<_LibraryFiltersSheet> {

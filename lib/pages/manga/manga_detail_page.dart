@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../models/manga/manga.dart';
 import '../../models/manga/manga_chapter.dart';
+import '../../services/download/download_service.dart';
 import '../../services/manga/manga_service.dart';
 import '../../theme/tomo_theme.dart';
 import '../../widgets/manga/tomo_network_image.dart';
@@ -42,6 +43,8 @@ class _MangaDetailPageState
 
   bool _synopsisExpanded = false;
   bool _detailsExpanded = false;
+  final Set<String> downloadedChapters = <String>{};
+  final Set<String> downloadingChapters = <String>{};
 
   @override
   void dispose() {
@@ -120,6 +123,31 @@ class _MangaDetailPageState
     });
   }
 
+  Future<void> _downloadChapter(chapter) async {
+    if (downloadingChapters.contains(chapter.id)) return;
+    setState(() => downloadingChapters.add(chapter.id));
+    try {
+      await downloadService.downloadChapter(
+        manga: _detailsManga ?? widget.manga,
+        chapter: chapter,
+      );
+      if (!mounted) return;
+      setState(() => downloadedChapters.add(chapter.id));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Chapter downloaded.')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Download failed: $error')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => downloadingChapters.remove(chapter.id));
+      }
+    }
+  }
+
   Future<void> loadChapters() async {
     setState(() {
       loadingChapters = true;
@@ -133,9 +161,21 @@ class _MangaDetailPageState
 
       if (!mounted) return;
 
+      final downloaded = <String>{};
+      for (final chapter in found) {
+        if (await downloadService.isDownloaded(widget.manga.id, chapter.id)) {
+          downloaded.add(chapter.id);
+        }
+      }
+
+      if (!mounted) return;
+
       setState(() {
         chapters = found;
         loadingChapters = false;
+        downloadedChapters
+          ..clear()
+          ..addAll(downloaded);
       });
       await LibraryScope.read(context).rememberChapterCount(
         widget.manga.id,
@@ -1192,6 +1232,37 @@ class _MangaDetailPageState
                                   ),
                                 ),
 
+                                IconButton(
+                                  onPressed: downloadingChapters.contains(chapter.id)
+                                      ? null
+                                      : () => _downloadChapter(chapter),
+                                  tooltip: downloadedChapters.contains(chapter.id)
+                                      ? 'Downloaded'
+                                      : 'Download chapter',
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(
+                                    minWidth: 44,
+                                    minHeight: 44,
+                                  ),
+                                  icon: downloadingChapters.contains(chapter.id)
+                                      ? const SizedBox(
+                                          width: 16,
+                                          height: 16,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: tomoPink,
+                                          ),
+                                        )
+                                      : Icon(
+                                          downloadedChapters.contains(chapter.id)
+                                              ? Icons.download_done_rounded
+                                              : Icons.download_outlined,
+                                          color: downloadedChapters.contains(chapter.id)
+                                              ? tomoPink
+                                              : Colors.white38,
+                                          size: 20,
+                                        ),
+                                ),
                                 IconButton(
                                   onPressed: () =>
                                       _toggleChapterRead(

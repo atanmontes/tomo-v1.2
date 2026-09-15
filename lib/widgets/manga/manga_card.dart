@@ -36,13 +36,13 @@ class MangaCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: tomoCard,
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(16),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(16),
         child: SizedBox(
-          height: 96,
+          height: 108,
           child: Row(
             children: [
               Stack(
@@ -53,12 +53,12 @@ class MangaCard extends StatelessWidget {
                   bottomLeft: Radius.circular(5),
                 ),
                 child: SizedBox(
-                  width: 70,
-                  height: 96,
+                  width: 76,
+                  height: 108,
                   child: TomoNetworkImage(
                           url: manga.cover,
-                          width: 70,
-                          height: 96,
+                          width: 76,
+                          height: 108,
                           fit: BoxFit.cover,
                           cacheWidth:
                               (140 *

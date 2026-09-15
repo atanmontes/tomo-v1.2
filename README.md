@@ -106,6 +106,22 @@ Every part of the interface is designed to stay out of the way.
 
 ---
 
+## 🧭 TOMO 1.4
+
+* Visual refresh (same logo + pink)
+* Settings from Home and Library
+* Library grid / list toggle
+* Continue ordered by last opened
+
+## 🧭 TOMO 1.3
+
+* Request queue + retry on HTTP 429
+* Disk cache for search, series, chapter lists and page URLs
+* Background update check waits and goes one series at a time
+* Continue reading pauses that background check
+* Backup / restore from Settings (Library tab)
+* Offline chapter download from the series page
+
 ## 🧭 TOMO 1.2
 
 This tree is the 1.2 refactor. It keeps your local library keys (`tomo_library`, `tomo_read_*`, `tomo_page_*`, `tomo_last_*`) so existing installs can migrate without losing progress.

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -6,6 +7,7 @@ import 'package:flutter/services.dart';
 import '../../core/weebcentral/constants.dart';
 import '../../models/manga/manga.dart';
 import '../../models/manga/manga_chapter.dart';
+import '../../services/download/download_service.dart';
 import '../../services/manga/manga_service.dart';
 import '../../state/library_scope.dart';
 import '../../theme/tomo_theme.dart';
@@ -127,9 +129,15 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
     });
 
     try {
-      final foundImages = await _mangaService.fetchChapterImages(
+      var foundImages = await downloadService.localPages(
+        widget.manga.id,
         activeChapter.id,
       );
+      if (foundImages.isEmpty) {
+        foundImages = await _mangaService.fetchChapterImages(
+          activeChapter.id,
+        );
+      }
       if (foundImages.isEmpty) {
         throw Exception('No pages found in this chapter.');
       }
@@ -167,9 +175,11 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
 
     for (final index in candidates) {
       if (index < 0 || index >= images.length) continue;
+      final source = images[index];
+      if (source.startsWith('/') || source.startsWith('file:')) continue;
       precacheImage(
         ResizeImage(
-          NetworkImage(images[index], headers: weebCentralImageHeaders),
+          NetworkImage(source, headers: weebCentralImageHeaders),
           width: cacheWidth,
         ),
         context,
@@ -340,40 +350,9 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
                                 minScale: 1,
                                 maxScale: 4,
                                 child: Center(
-                                  child: Image.network(
-                                    images[index],
-                                    fit: BoxFit.contain,
-                                    width: double.infinity,
-                                    height: double.infinity,
+                                  child: _ReaderImage(
+                                    source: images[index],
                                     cacheWidth: cacheWidth,
-                                    filterQuality: FilterQuality.medium,
-                                    gaplessPlayback: true,
-                                    headers: weebCentralImageHeaders,
-                                    frameBuilder: (
-                                      context,
-                                      child,
-                                      frame,
-                                      wasSynchronouslyLoaded,
-                                    ) {
-                                      if (wasSynchronouslyLoaded ||
-                                          frame != null) {
-                                        return child;
-                                      }
-                                      return const Center(
-                                        child: CircularProgressIndicator(
-                                          color: tomoPink,
-                                        ),
-                                      );
-                                    },
-                                    errorBuilder: (_, __, ___) {
-                                      return const Center(
-                                        child: Icon(
-                                          Icons.broken_image_outlined,
-                                          color: Colors.white24,
-                                          size: 50,
-                                        ),
-                                      );
-                                    },
                                   ),
                                 ),
                               ),
@@ -395,6 +374,67 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
                           ),
                       ],
                     ),
+    );
+  }
+}
+
+
+class _ReaderImage extends StatelessWidget {
+  final String source;
+  final int cacheWidth;
+
+  const _ReaderImage({
+    required this.source,
+    required this.cacheWidth,
+  });
+
+  bool get _isFile {
+    return source.startsWith('/') || source.startsWith('file:');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final error = const Center(
+      child: Icon(
+        Icons.broken_image_outlined,
+        color: Colors.white24,
+        size: 50,
+      ),
+    );
+    final loading = const Center(
+      child: CircularProgressIndicator(color: tomoPink),
+    );
+
+    if (_isFile) {
+      final path = source.startsWith('file:')
+          ? Uri.parse(source).toFilePath()
+          : source;
+      return Image.file(
+        File(path),
+        fit: BoxFit.contain,
+        width: double.infinity,
+        height: double.infinity,
+        cacheWidth: cacheWidth,
+        filterQuality: FilterQuality.medium,
+        gaplessPlayback: true,
+        errorBuilder: (_, __, ___) => error,
+      );
+    }
+
+    return Image.network(
+      source,
+      fit: BoxFit.contain,
+      width: double.infinity,
+      height: double.infinity,
+      cacheWidth: cacheWidth,
+      filterQuality: FilterQuality.medium,
+      gaplessPlayback: true,
+      headers: weebCentralImageHeaders,
+      frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+        if (wasSynchronouslyLoaded || frame != null) return child;
+        return loading;
+      },
+      errorBuilder: (_, __, ___) => error,
     );
   }
 }

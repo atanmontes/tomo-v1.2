@@ -30,6 +30,7 @@ Future<void> openMangaOrContinue(
 
   try {
     final store = LibraryScope.read(context);
+    store.pauseBackgroundUpdates = true;
     final service = MangaService();
     final chapters = await service.fetchChapters(manga.id);
     await store.rememberChapterCount(manga.id, chapters.length);
@@ -43,6 +44,7 @@ Future<void> openMangaOrContinue(
           );
 
     if (!context.mounted) return;
+    store.pauseBackgroundUpdates = false;
     Navigator.pop(context);
 
     if (chapter == null) {
@@ -64,6 +66,9 @@ Future<void> openMangaOrContinue(
       ),
     );
   } catch (_) {
+    if (context.mounted) {
+      LibraryScope.read(context).pauseBackgroundUpdates = false;
+    }
     if (!context.mounted) return;
     Navigator.pop(context);
     await Navigator.push(

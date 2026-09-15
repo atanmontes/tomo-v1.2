@@ -12,6 +12,7 @@ import '../widgets/manga/tomo_network_image.dart';
 import 'manga/manga_detail_page.dart';
 import 'manga/reader_launcher.dart';
 import 'library_page.dart';
+import 'settings/settings_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -48,23 +49,33 @@ class _HomePageState extends State<HomePage> {
           const LibraryPage(),
         ],
       ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _selectedIndex,
-        onDestinationSelected: _onNavigationChanged,
-        backgroundColor: tomoCard,
-        indicatorColor: tomoPink.withOpacity(0.16),
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home_rounded),
-            label: 'Home',
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          color: tomoElevated,
+          border: Border(
+            top: BorderSide(color: Colors.white.withOpacity(0.06)),
           ),
-          NavigationDestination(
-            icon: Icon(Icons.bookmark_outline_rounded),
-            selectedIcon: Icon(Icons.bookmark_rounded),
-            label: 'Library',
-          ),
-        ],
+        ),
+        child: NavigationBar(
+          selectedIndex: _selectedIndex,
+          onDestinationSelected: _onNavigationChanged,
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          height: 68,
+          indicatorColor: tomoPink.withOpacity(0.18),
+          destinations: const [
+            NavigationDestination(
+              icon: Icon(Icons.home_outlined),
+              selectedIcon: Icon(Icons.home_rounded, color: tomoPink),
+              label: 'Home',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.collections_bookmark_outlined),
+              selectedIcon: Icon(Icons.collections_bookmark_rounded, color: tomoPink),
+              label: 'Library',
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -316,36 +327,54 @@ class _HomeContentState extends State<_HomeContent> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SizedBox(height: 8),
-            RichText(
-              text: const TextSpan(
-                style: TextStyle(fontSize: 32),
-                children: [
-                  TextSpan(
-                    text: 'TOM',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: -1.5,
-                      color: Colors.white,
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Expanded(
+                  child: RichText(
+                    text: const TextSpan(
+                      style: TextStyle(fontSize: 34),
+                      children: [
+                        TextSpan(
+                          text: 'TOM',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: -1.8,
+                            color: Colors.white,
+                          ),
+                        ),
+                        TextSpan(
+                          text: 'O',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: -1.8,
+                            color: tomoPink,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  TextSpan(
-                    text: 'O',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: -1.5,
-                      color: tomoPink,
-                    ),
-                  ),
-                ],
-              ),
+                ),
+                IconButton(
+                  tooltip: 'Settings',
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const SettingsPage(),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.settings_outlined),
+                ),
+              ],
             ),
-            const SizedBox(height: 6),
             const Text(
               'Find your next manga',
               style: TextStyle(
-                fontSize: 16,
+                fontSize: 14,
                 color: Colors.white54,
+                letterSpacing: 0.2,
               ),
             ),
             const SizedBox(height: 18),
@@ -382,15 +411,15 @@ class _HomeContentState extends State<_HomeContent> {
                       filled: true,
                       fillColor: tomoCard,
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(14),
+                        borderRadius: BorderRadius.circular(18),
                         borderSide: BorderSide.none,
                       ),
                       enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(14),
+                        borderRadius: BorderRadius.circular(18),
                         borderSide: BorderSide.none,
                       ),
                       focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(14),
+                        borderRadius: BorderRadius.circular(18),
                         borderSide: const BorderSide(
                           color: tomoPink,
                           width: 1,
@@ -405,10 +434,10 @@ class _HomeContentState extends State<_HomeContent> {
                 const SizedBox(width: 8),
                 Material(
                   color: tomoCard,
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(18),
                   child: InkWell(
                     onTap: _openSearchFilters,
-                    borderRadius: BorderRadius.circular(14),
+                    borderRadius: BorderRadius.circular(18),
                     child: SizedBox(
                       width: 50,
                       height: 52,
@@ -466,7 +495,7 @@ class _HomeContentState extends State<_HomeContent> {
                                     child: Center(
                                       child: Material(
                                         color: tomoCard,
-                                        borderRadius: BorderRadius.circular(14),
+                                        borderRadius: BorderRadius.circular(18),
                                         child: InkWell(
                                           onTap: loadingMore
                                               ? null
@@ -565,7 +594,7 @@ class _HomeContentSections extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           SizedBox(
-            height: 185,
+            height: 210,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               itemCount: continueReading.length,
@@ -669,17 +698,17 @@ class _HomeMangaTile extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: SizedBox(
-        width: 115,
+        width: 122,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Stack(
               children: [
             ClipRRect(
-              borderRadius: BorderRadius.circular(5),
+              borderRadius: BorderRadius.circular(12),
               child: SizedBox(
-                width: 115,
-                height: 158,
+                width: 122,
+                height: 168,
                 child: manga.cover.isEmpty
                     ? Container(
                         color: tomoCard,

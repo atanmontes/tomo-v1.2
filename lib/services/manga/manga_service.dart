@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import '../../core/cache/html_cache.dart';
 import '../../core/weebcentral/client.dart';
 import '../../core/weebcentral/constants.dart';
 import '../../core/weebcentral/parsers.dart';
@@ -6,13 +9,24 @@ import '../../models/manga/manga_chapter.dart';
 import '../../models/manga/manga_search_filters.dart';
 
 class MangaService {
-  MangaService({WeebCentralClient? client})
-      : _client = client ?? WeebCentralClient();
+  MangaService({WeebCentralClient? client, HtmlCache? cache})
+      : _client = client ?? weebCentralClient,
+        _cache = cache ?? htmlCache;
 
   final WeebCentralClient _client;
+  final HtmlCache _cache;
 
-  Future<MangaItem> fetchManga(String url) async {
+  Future<MangaItem> fetchManga(String url, {bool forceRefresh = false}) async {
+    const ttl = Duration(hours: 6);
+    final cacheKey = 'series:$url';
+    if (!forceRefresh) {
+      final cached = await _cache.read(cacheKey, ttl: ttl);
+      if (cached != null) {
+        return parseSeriesPage(cached, url);
+      }
+    }
     final html = await _client.getHtml(Uri.parse(url));
+    await _cache.write(cacheKey, html, ttl: ttl);
     return parseSeriesPage(html, url);
   }
 
@@ -54,19 +68,49 @@ class MangaService {
         ? base
         : Uri.parse('${base.toString()}&${extra.join('&')}');
 
+    const ttl = Duration(minutes: 10);
+    final cacheKey = 'search:${uri.toString()}';
+    final cached = await _cache.read(cacheKey, ttl: ttl);
+    if (cached != null) {
+      return parseSearchResults(cached);
+    }
+
     final html = await _client.getHtml(uri);
+    await _cache.write(cacheKey, html, ttl: ttl);
     return parseSearchResults(html);
   }
 
-  Future<List<ChapterItem>> fetchChapters(String mangaId) async {
+  Future<List<ChapterItem>> fetchChapters(
+    String mangaId, {
+    bool forceRefresh = false,
+  }) async {
+    const ttl = Duration(minutes: 30);
+    final cacheKey = 'chapters:$mangaId';
+    if (!forceRefresh) {
+      final cached = await _cache.read(cacheKey, ttl: ttl);
+      if (cached != null) {
+        return parseChapterList(cached);
+      }
+    }
+
     final uri = Uri.parse(
       '$weebCentralBaseUrl/series/$mangaId/full-chapter-list',
     );
     final html = await _client.getHtml(uri);
+    await _cache.write(cacheKey, html, ttl: ttl);
     return parseChapterList(html);
   }
 
   Future<List<String>> fetchChapterImages(String chapterId) async {
+    const ttl = Duration(hours: 12);
+    final cacheKey = 'pages:$chapterId';
+    final cached = await _cache.read(cacheKey, ttl: ttl);
+    if (cached != null && cached.startsWith('[')) {
+      try {
+        return List<String>.from(jsonDecode(cached) as List);
+      } catch (_) {}
+    }
+
     final uri = Uri.parse(
       '$weebCentralBaseUrl/chapters/$chapterId/images'
       '?is_prev=False&current_page=1&reading_style=long_strip',
@@ -75,7 +119,9 @@ class MangaService {
       uri,
       timeout: const Duration(seconds: 20),
     );
-    return parseChapterImages(html);
+    final pages = parseChapterImages(html);
+    await _cache.write(cacheKey, jsonEncode(pages), ttl: ttl);
+    return pages;
   }
 
   String _sortValue(String value) {

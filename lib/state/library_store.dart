@@ -1,6 +1,9 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/manga/manga.dart';
@@ -15,6 +18,7 @@ class LibraryStore extends ChangeNotifier {
   static const _pagePrefix = 'tomo_page_';
   static const _lastPrefix = 'tomo_last_';
   static const _knownCountPrefix = 'tomo_known_count_';
+  static const _openedPrefix = 'tomo_opened_';
 
   final MangaService _mangaService;
 
@@ -172,6 +176,7 @@ class LibraryStore extends ChangeNotifier {
   Future<void> setLastChapterId(String mangaId, String chapterId) async {
     final prefs = await _preferences;
     await prefs.setString('$_lastPrefix$mangaId', chapterId);
+    await prefs.setInt('$_openedPrefix$mangaId', DateTime.now().millisecondsSinceEpoch);
   }
 
   Future<int> pageFor(String mangaId, String chapterId) async {
@@ -183,9 +188,21 @@ class LibraryStore extends ChangeNotifier {
     final prefs = await _preferences;
     await prefs.setInt('$_pagePrefix${mangaId}_$chapterId', page);
     await prefs.setString('$_lastPrefix$mangaId', chapterId);
+    await prefs.setInt('$_openedPrefix$mangaId', DateTime.now().millisecondsSinceEpoch);
   }
 
   bool hasUpdate(String id) => updatedIds.contains(id);
+
+  Future<int> openedAt(String mangaId) async {
+    final prefs = await _preferences;
+    return prefs.getInt('$_openedPrefix$mangaId') ?? 0;
+  }
+
+  List<MangaItem> continueReading({int limit = 8}) {
+    final reading = items.where((manga) => readCountFor(manga.id) > 0).toList();
+    return reading.take(limit).toList();
+  }
+
 
   Future<void> rememberChapterCount(String mangaId, int count) async {
     final prefs = await _preferences;
@@ -211,22 +228,135 @@ class LibraryStore extends ChangeNotifier {
     await prefs.setStringList('tomo_updated_ids', updatedIds.toList());
   }
 
-  Future<void> checkLibraryUpdates() async {
+  bool pauseBackgroundUpdates = false;
+
+  Future<void> checkLibraryUpdates({bool force = false}) async {
     if (checkingUpdates || items.isEmpty) return;
     checkingUpdates = true;
     notifyListeners();
     try {
+      if (!force) {
+        await Future<void>.delayed(const Duration(seconds: 4));
+      }
       for (final manga in List<MangaItem>.from(items)) {
+        while (pauseBackgroundUpdates) {
+          await Future<void>.delayed(const Duration(milliseconds: 400));
+        }
         try {
           final chapters = await _mangaService.fetchChapters(manga.id);
           await rememberChapterCount(manga.id, chapters.length);
         } catch (error) {
           debugPrint('TOMO update check failed for ${manga.id}: $error');
         }
+        await Future<void>.delayed(const Duration(milliseconds: 1200));
       }
     } finally {
       checkingUpdates = false;
       notifyListeners();
     }
+  }
+
+  Future<File> backupFile() async {
+    final docs = await getApplicationDocumentsDirectory();
+    return File(p.join(docs.path, 'tomo_backup.json'));
+  }
+
+  Future<File> exportBackup() async {
+    final prefs = await _preferences;
+    final progress = <String, dynamic>{};
+    for (final manga in items) {
+      final pages = <String, int>{};
+      for (final key in prefs.getKeys()) {
+        final prefix = '$_pagePrefix${manga.id}_';
+        if (key.startsWith(prefix)) {
+          pages[key.substring(prefix.length)] = prefs.getInt(key) ?? 0;
+        }
+      }
+      progress[manga.id] = {
+        'read': prefs.getStringList('$_readPrefix${manga.id}') ?? [],
+        'last': prefs.getString('$_lastPrefix${manga.id}'),
+        'knownCount': prefs.getInt('$_knownCountPrefix${manga.id}'),
+        'pages': pages,
+      };
+    }
+
+    final payload = {
+      'version': 1,
+      'exportedAt': DateTime.now().toIso8601String(),
+      'library': items.map((manga) => manga.toJson()).toList(),
+      'updated': updatedIds.toList(),
+      'progress': progress,
+    };
+
+    final file = await backupFile();
+    await file.writeAsString(const JsonEncoder.withIndent('  ').convert(payload));
+    return file;
+  }
+
+  Future<int> importBackup(File file) async {
+    final decoded = jsonDecode(await file.readAsString());
+    if (decoded is! Map) {
+      throw const FormatException('Invalid backup file.');
+    }
+
+    final rawLibrary = decoded['library'];
+    if (rawLibrary is! List) {
+      throw const FormatException('Backup has no library.');
+    }
+
+    final loadedItems = rawLibrary
+        .map((item) => MangaItem.fromJson(Map<String, dynamic>.from(item as Map)))
+        .toList();
+
+    items = loadedItems;
+    await _persistLibrary();
+
+    final prefs = await _preferences;
+    final progress = decoded['progress'];
+    if (progress is Map) {
+      for (final entry in progress.entries) {
+        final mangaId = '${entry.key}';
+        final data = entry.value;
+        if (data is! Map) continue;
+        final read = data['read'];
+        if (read is List) {
+          await prefs.setStringList(
+            '$_readPrefix$mangaId',
+            read.map((item) => '$item').toList(),
+          );
+          readCounts[mangaId] = read.length;
+        }
+        final last = data['last'];
+        if (last is String && last.isNotEmpty) {
+          await prefs.setString('$_lastPrefix$mangaId', last);
+        }
+        final known = data['knownCount'];
+        if (known is num) {
+          await prefs.setInt('$_knownCountPrefix$mangaId', known.toInt());
+        }
+        final pages = data['pages'];
+        if (pages is Map) {
+          for (final page in pages.entries) {
+            if (page.value is num) {
+              await prefs.setInt(
+                '$_pagePrefix${mangaId}_${page.key}',
+                (page.value as num).toInt(),
+              );
+            }
+          }
+        }
+      }
+    }
+
+    updatedIds
+      ..clear()
+      ..addAll(
+        (decoded['updated'] is List)
+            ? (decoded['updated'] as List).map((item) => '$item')
+            : const [],
+      );
+    await _persistUpdatedIds();
+    notifyListeners();
+    return items.length;
   }
 }

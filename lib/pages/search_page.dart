@@ -165,6 +165,19 @@ class _SearchPageState extends State<SearchPage> {
 
     _searchDebounce?.cancel();
 
+    // SI EL USUARIO LE DIO A RESET Y NO TIENE TEXTO ESCRITO:
+    // Limpiamos los resultados para que `hasSearch` sea false y se muestre Explore.
+    if (search.trim().isEmpty && !_searchFilters.hasFilters) {
+      setState(() {
+        searchResults = [];
+        searching = false;
+        loadingMore = false;
+        hasMoreResults = true;
+        _searchOffset = 0;
+      });
+      return;
+    }
+
     await _searchManga(search.trim());
   }
 
@@ -172,39 +185,26 @@ class _SearchPageState extends State<SearchPage> {
     String? tag,
     String? sort,
   }) async {
-    final initial = MangaSearchFilters(
+    // Creamos la nueva configuración de filtros directamente
+    final updatedFilters = MangaSearchFilters(
       sort: sort ?? _searchFilters.sort,
       order: _searchFilters.order,
       official: _searchFilters.official,
-      animeAdaptation:
-          _searchFilters.animeAdaptation,
+      animeAdaptation: _searchFilters.animeAdaptation,
       adultContent: _searchFilters.adultContent,
       status: _searchFilters.status,
       type: _searchFilters.type,
-      tags: tag != null
-          ? [tag]
-          : _searchFilters.tags,
-    );
-    final selected =
-        await showModalBottomSheet<MangaSearchFilters>(
-      context: context,
-      backgroundColor: tomoCard,
-      isScrollControlled: true,
-      builder: (_) {
-        return _SearchFiltersSheet(
-          initial: initial,
-        );
-      },
+      tags: tag != null ? [tag] : _searchFilters.tags,
     );
 
-    if (selected == null) return;
-
+    // Actualizamos el estado de los filtros
     setState(() {
-      _searchFilters = selected;
+      _searchFilters = updatedFilters;
     });
 
     _searchDebounce?.cancel();
 
+    // Disparamos la búsqueda directamente con el término actual (o string vacío)
     await _searchManga(search.trim());
   }
 

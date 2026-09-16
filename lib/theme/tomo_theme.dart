@@ -12,6 +12,11 @@ ThemeData tomoTheme() {
     brightness: Brightness.dark,
     useMaterial3: true,
     scaffoldBackgroundColor: tomoBackground,
+    // Eliminamos los splashes globales
+    splashColor: Colors.transparent,
+    highlightColor: Colors.transparent,
+    hoverColor: Colors.transparent,
+    splashFactory: NoSplash.splashFactory,
     colorScheme: ColorScheme.fromSeed(
       seedColor: tomoPink,
       brightness: Brightness.dark,
@@ -35,7 +40,17 @@ ThemeData tomoTheme() {
     ),
     navigationBarTheme: NavigationBarThemeData(
       backgroundColor: tomoElevated,
-      indicatorColor: tomoPinkSoft,
+      // 1. Quita la píldora/rectángulo de selección de fondo
+      indicatorColor: Colors.transparent, 
+      // 2. Desactiva el overlay/ripple de toque en los ítems del menú
+      overlayColor: WidgetStateProperty.all(Colors.transparent), 
+      // 3. Cambia los colores de los iconos (rosa si está seleccionado, blanco tenue si no)
+      iconTheme: WidgetStateProperty.resolveWith((states) {
+        final selected = states.contains(WidgetState.selected);
+        return IconThemeData(
+          color: selected ? tomoPink : Colors.white54,
+        );
+      }),
       labelTextStyle: WidgetStateProperty.resolveWith((states) {
         final selected = states.contains(WidgetState.selected);
         return TextStyle(

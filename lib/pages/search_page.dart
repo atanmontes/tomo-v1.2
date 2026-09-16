@@ -840,7 +840,7 @@ class _SearchFiltersSheetState
                     onPressed: () {
                       setState(() {
                         sort = 'Best Match';
-                        order = 'Ascending';
+                        order = 'Descending';
                         official = 'Any';
                         anime = 'Any';
                         adult = 'Any';
@@ -848,6 +848,9 @@ class _SearchFiltersSheetState
                         type = 'Any';
                         tags.clear();
                       });
+                      // Cerramos el sheet igual que "Apply Filters"
+                      // para que el usuario regrese a search_page.
+                      _apply();
                     },
                     child: const Text('Reset'),
                   ),

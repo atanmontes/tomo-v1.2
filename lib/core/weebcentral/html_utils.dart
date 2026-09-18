@@ -20,8 +20,45 @@ bool looksLikeYes(String value) {
   return normalized == 'yes' || normalized == 'true' || normalized == 'si';
 }
 
+/// De un `srcset` (p. ej. "a.jpg 200w, b.jpg 800w"), regresa la URL
+/// con el ancho declarado más grande. Si ninguna trae descriptor de
+/// ancho, regresa la primera (mismo comportamiento de antes).
+String? _widestSrcsetCandidate(String srcset) {
+  String? best;
+  var bestWidth = -1;
+
+  for (final entry in srcset.split(',')) {
+    final parts = entry.trim().split(RegExp(r'\s+'));
+    if (parts.isEmpty || parts.first.isEmpty) continue;
+
+    var width = 0;
+    if (parts.length > 1) {
+      final match = RegExp(r'(\d+)w').firstMatch(parts[1]);
+      if (match != null) {
+        width = int.tryParse(match.group(1)!) ?? 0;
+      }
+    }
+
+    if (width > bestWidth) {
+      bestWidth = width;
+      best = parts.first;
+    }
+  }
+
+  return best;
+}
+
 String? firstCoverCandidate(Element root) {
   for (final image in root.querySelectorAll('img')) {
+    final imgSrcset = image.attributes['srcset'] ?? '';
+    if (imgSrcset.contains('temp.compsci88.com/cover') ||
+        imgSrcset.contains('/cover/')) {
+      final widest = _widestSrcsetCandidate(imgSrcset);
+      if (widest != null && widest.isNotEmpty) {
+        return absoluteWeebUrl(widest);
+      }
+    }
+
     final src = image.attributes['src'] ?? '';
     final dataSrc = image.attributes['data-src'] ?? '';
     final candidate = src.isNotEmpty ? src : dataSrc;
@@ -39,9 +76,9 @@ String? firstCoverCandidate(Element root) {
       continue;
     }
 
-    final first = srcSet.split(',').first.trim().split(' ').first;
-    if (first.isNotEmpty) {
-      return absoluteWeebUrl(first);
+    final widest = _widestSrcsetCandidate(srcSet);
+    if (widest != null && widest.isNotEmpty) {
+      return absoluteWeebUrl(widest);
     }
   }
 

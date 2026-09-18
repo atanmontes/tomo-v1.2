@@ -530,12 +530,23 @@ class _LibraryGridTile extends StatelessWidget {
                               color: Colors.white24,
                             ),
                           )
-                        : TomoNetworkImage(
-                            url: manga.cover,
-                            fit: BoxFit.cover,
-                            width: 400,
-                            height: 600,
-                            cacheWidth: 360,
+                        : LayoutBuilder(
+                            builder: (context, constraints) {
+                              return TomoNetworkImage(
+                                url: manga.cover,
+                                fit: BoxFit.cover,
+                                width: 400,
+                                height: 600,
+                                cacheWidth: (constraints
+                                            .maxWidth *
+                                        MediaQuery
+                                            .devicePixelRatioOf(
+                                          context,
+                                        ) *
+                                        1.15)
+                                    .round(),
+                              );
+                            },
                           ),
                   ),
                   if (hasUpdate)

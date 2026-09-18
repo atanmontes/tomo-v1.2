@@ -21,7 +21,7 @@ class TomoNetworkImage extends StatelessWidget {
     this.height,
     this.fit = BoxFit.cover,
     this.cacheWidth,
-    this.filterQuality = FilterQuality.low,
+    this.filterQuality = FilterQuality.medium,
     this.placeholder,
     this.errorIcon = Icons.broken_image_outlined,
     this.errorIconSize = 30,

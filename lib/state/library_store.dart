@@ -299,10 +299,17 @@ class LibraryStore extends ChangeNotifier {
     final progress = <String, dynamic>{};
     for (final manga in items) {
       final pages = <String, int>{};
+      final offsets = <String, double>{};
       for (final key in prefs.getKeys()) {
-        final prefix = '$_pagePrefix${manga.id}_';
-        if (key.startsWith(prefix)) {
-          pages[key.substring(prefix.length)] = prefs.getInt(key) ?? 0;
+        final pagePrefix = '$_pagePrefix${manga.id}_';
+        if (key.startsWith(pagePrefix)) {
+          pages[key.substring(pagePrefix.length)] = prefs.getInt(key) ?? 0;
+        }
+
+        final offsetPrefix = '$_offsetPrefix${manga.id}_';
+        if (key.startsWith(offsetPrefix)) {
+          offsets[key.substring(offsetPrefix.length)] =
+              prefs.getDouble(key) ?? 0;
         }
       }
       progress[manga.id] = {
@@ -310,11 +317,13 @@ class LibraryStore extends ChangeNotifier {
         'last': prefs.getString('$_lastPrefix${manga.id}'),
         'knownCount': prefs.getInt('$_knownCountPrefix${manga.id}'),
         'pages': pages,
+        'offsets': offsets,
+        'readerMode': prefs.getString('$_modePrefix${manga.id}'),
       };
     }
 
     final payload = {
-      'version': 1,
+      'version': 2,
       'exportedAt': DateTime.now().toIso8601String(),
       'library': items.map((manga) => manga.toJson()).toList(),
       'updated': updatedIds.toList(),
@@ -377,6 +386,23 @@ class LibraryStore extends ChangeNotifier {
               );
             }
           }
+        }
+
+        final offsets = data['offsets'];
+        if (offsets is Map) {
+          for (final offset in offsets.entries) {
+            if (offset.value is num) {
+              await prefs.setDouble(
+                '$_offsetPrefix${mangaId}_${offset.key}',
+                (offset.value as num).toDouble(),
+              );
+            }
+          }
+        }
+
+        final readerMode = data['readerMode'];
+        if (readerMode is String && readerMode.isNotEmpty) {
+          await prefs.setString('$_modePrefix$mangaId', readerMode);
         }
       }
     }

@@ -501,8 +501,8 @@ class _FeaturedMangaCarouselState
   Timer? _autoSlideTimer;
   int _currentPage = 0;
 
-  // manga.id -> banner url (null = intentado y no hubo, o aún cargando)
-  final Map<String, String?> _banners = {};
+  // manga.id -> resultado de AniList (banner y/o cover en alta res)
+  final Map<String, MangaBannerResult?> _images = {};
 
   @override
   void initState() {
@@ -526,17 +526,20 @@ class _FeaturedMangaCarouselState
 
   void _loadBanners() {
     for (final manga in widget.manga) {
-      if (_banners.containsKey(manga.id)) continue;
+      if (_images.containsKey(manga.id)) continue;
 
       // Reservamos el slot antes del await para no disparar
       // el mismo fetch dos veces.
-      _banners[manga.id] = null;
+      _images[manga.id] = null;
 
-      MangaBannerService.fetchBanner(manga.title).then((banner) {
-        if (!mounted || banner == null) return;
+      MangaBannerService.fetchImages(
+        manga.title,
+        altTitles: manga.associatedNames,
+      ).then((result) {
+        if (!mounted || result.isEmpty) return;
 
         setState(() {
-          _banners[manga.id] = banner;
+          _images[manga.id] = result;
         });
       });
     }
@@ -601,7 +604,7 @@ class _FeaturedMangaCarouselState
                 padding: const EdgeInsets.only(right: 8),
                 child: _FeaturedMangaHero(
                   manga: manga,
-                  bannerUrl: _banners[manga.id],
+                  images: _images[manga.id],
                   onStartReading: () =>
                       widget.onOpen(manga),
                   onSubscribe: () =>
@@ -651,13 +654,13 @@ class _FeaturedMangaCarouselState
 
 class _FeaturedMangaHero extends StatelessWidget {
   final MangaItem manga;
-  final String? bannerUrl;
+  final MangaBannerResult? images;
   final VoidCallback onStartReading;
   final VoidCallback onSubscribe;
 
   const _FeaturedMangaHero({
     required this.manga,
-    this.bannerUrl,
+    this.images,
     required this.onStartReading,
     required this.onSubscribe,
   });
@@ -696,38 +699,46 @@ class _FeaturedMangaHero extends StatelessWidget {
                   duration: const Duration(
                     milliseconds: 300,
                   ),
-                  child: bannerUrl != null &&
-                          bannerUrl!.isNotEmpty
+                  child: images?.bannerImage != null
                       ? TomoNetworkImage(
-                          key: ValueKey(bannerUrl),
-                          url: bannerUrl!,
+                          key: ValueKey(images!.bannerImage),
+                          url: images!.bannerImage!,
                           fit: BoxFit.cover,
                           width: double.infinity,
                           height: double.infinity,
                           cacheWidth: 900,
                         )
-                      : manga.cover.isEmpty
-                          ? Container(
-                              key: const ValueKey(
-                                'featured-placeholder',
-                              ),
-                              color: tomoCard,
-                              child: const Icon(
-                                Icons.menu_book_rounded,
-                                color: Colors.white24,
-                                size: 50,
-                              ),
-                            )
-                          : TomoNetworkImage(
-                              key: const ValueKey(
-                                'featured-cover',
-                              ),
-                              url: manga.cover,
+                      : images?.coverImage != null
+                          ? TomoNetworkImage(
+                              key: ValueKey(images!.coverImage),
+                              url: images!.coverImage!,
                               fit: BoxFit.cover,
                               width: double.infinity,
                               height: double.infinity,
                               cacheWidth: 900,
-                            ),
+                            )
+                          : manga.cover.isEmpty
+                              ? Container(
+                                  key: const ValueKey(
+                                    'featured-placeholder',
+                                  ),
+                                  color: tomoCard,
+                                  child: const Icon(
+                                    Icons.menu_book_rounded,
+                                    color: Colors.white24,
+                                    size: 50,
+                                  ),
+                                )
+                              : TomoNetworkImage(
+                                  key: const ValueKey(
+                                    'featured-cover',
+                                  ),
+                                  url: manga.cover,
+                                  fit: BoxFit.cover,
+                                  width: double.infinity,
+                                  height: double.infinity,
+                                  cacheWidth: 900,
+                                ),
                 ),
               ),
 
@@ -954,7 +965,14 @@ class _HomeMangaTile extends StatelessWidget {
                             width: 122,
                             height: 168,
                             fit: BoxFit.cover,
-                            cacheWidth: 260,
+                            cacheWidth:
+                                (122 *
+                                        MediaQuery
+                                            .devicePixelRatioOf(
+                                          context,
+                                        ) *
+                                        1.15)
+                                    .round(),
                           ),
                   ),
                 ),
@@ -1060,12 +1078,23 @@ class _HomeLatestTile extends StatelessWidget {
                               size: 34,
                             ),
                           )
-                        : TomoNetworkImage(
-                            url: manga.cover,
-                            fit: BoxFit.cover,
-                            width: 400,
-                            height: 600,
-                            cacheWidth: 360,
+                        : LayoutBuilder(
+                            builder: (context, constraints) {
+                              return TomoNetworkImage(
+                                url: manga.cover,
+                                fit: BoxFit.cover,
+                                width: 400,
+                                height: 600,
+                                cacheWidth: (constraints
+                                            .maxWidth *
+                                        MediaQuery
+                                            .devicePixelRatioOf(
+                                          context,
+                                        ) *
+                                        1.15)
+                                    .round(),
+                              );
+                            },
                           ),
                   ),
                 ),

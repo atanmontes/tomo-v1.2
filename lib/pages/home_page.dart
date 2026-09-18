@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../models/manga/manga.dart';
+import '../services/manga/manga_banner_service.dart';
 import '../services/manga/manga_service.dart';
 import '../state/library_scope.dart';
 import '../theme/tomo_theme.dart';
@@ -286,6 +287,17 @@ class _HomeContentSections extends StatelessWidget {
         .take(5)
         .toList();
 
+    final featuredIds =
+        featuredManga.map((manga) => manga.id).toSet();
+
+    // Latest Updates no debe repetir lo que ya se muestra en
+    // Featured.
+    final updatesManga = latestManga
+        .where(
+          (manga) => !featuredIds.contains(manga.id),
+        )
+        .toList();
+
     return ListView(
       padding: const EdgeInsets.only(bottom: 24),
       children: [
@@ -373,7 +385,7 @@ class _HomeContentSections extends StatelessWidget {
               ),
             ),
           )
-        else if (latestManga.isEmpty)
+        else if (updatesManga.isEmpty)
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 40),
             child: Text(
@@ -387,7 +399,7 @@ class _HomeContentSections extends StatelessWidget {
           GridView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
-            itemCount: latestManga.length,
+            itemCount: updatesManga.length,
             gridDelegate:
                 const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 3,
@@ -396,7 +408,7 @@ class _HomeContentSections extends StatelessWidget {
               mainAxisExtent: 215,
             ),
             itemBuilder: (context, index) {
-              final manga = latestManga[index];
+              final manga = updatesManga[index];
 
               return RepaintBoundary(
                 child: _HomeLatestTile(
@@ -489,6 +501,9 @@ class _FeaturedMangaCarouselState
   Timer? _autoSlideTimer;
   int _currentPage = 0;
 
+  // manga.id -> banner url (null = intentado y no hubo, o aún cargando)
+  final Map<String, String?> _banners = {};
+
   @override
   void initState() {
     super.initState();
@@ -498,6 +513,33 @@ class _FeaturedMangaCarouselState
     );
 
     _startAutoSlide();
+    _loadBanners();
+  }
+
+  @override
+  void didUpdateWidget(
+    covariant _FeaturedMangaCarousel oldWidget,
+  ) {
+    super.didUpdateWidget(oldWidget);
+    _loadBanners();
+  }
+
+  void _loadBanners() {
+    for (final manga in widget.manga) {
+      if (_banners.containsKey(manga.id)) continue;
+
+      // Reservamos el slot antes del await para no disparar
+      // el mismo fetch dos veces.
+      _banners[manga.id] = null;
+
+      MangaBannerService.fetchBanner(manga.title).then((banner) {
+        if (!mounted || banner == null) return;
+
+        setState(() {
+          _banners[manga.id] = banner;
+        });
+      });
+    }
   }
 
   void _startAutoSlide() {
@@ -559,6 +601,7 @@ class _FeaturedMangaCarouselState
                 padding: const EdgeInsets.only(right: 8),
                 child: _FeaturedMangaHero(
                   manga: manga,
+                  bannerUrl: _banners[manga.id],
                   onStartReading: () =>
                       widget.onOpen(manga),
                   onSubscribe: () =>
@@ -608,11 +651,13 @@ class _FeaturedMangaCarouselState
 
 class _FeaturedMangaHero extends StatelessWidget {
   final MangaItem manga;
+  final String? bannerUrl;
   final VoidCallback onStartReading;
   final VoidCallback onSubscribe;
 
   const _FeaturedMangaHero({
     required this.manga,
+    this.bannerUrl,
     required this.onStartReading,
     required this.onSubscribe,
   });
@@ -647,22 +692,43 @@ class _FeaturedMangaHero extends StatelessWidget {
                 ),
 
               Positioned.fill(
-                child: manga.cover.isEmpty
-                    ? Container(
-                        color: tomoCard,
-                        child: const Icon(
-                          Icons.menu_book_rounded,
-                          color: Colors.white24,
-                          size: 50,
-                        ),
-                      )
-                    : TomoNetworkImage(
-                        url: manga.cover,
-                        fit: BoxFit.cover,
-                        width: double.infinity,
-                        height: double.infinity,
-                        cacheWidth: 900,
-                      ),
+                child: AnimatedSwitcher(
+                  duration: const Duration(
+                    milliseconds: 300,
+                  ),
+                  child: bannerUrl != null &&
+                          bannerUrl!.isNotEmpty
+                      ? TomoNetworkImage(
+                          key: ValueKey(bannerUrl),
+                          url: bannerUrl!,
+                          fit: BoxFit.cover,
+                          width: double.infinity,
+                          height: double.infinity,
+                          cacheWidth: 900,
+                        )
+                      : manga.cover.isEmpty
+                          ? Container(
+                              key: const ValueKey(
+                                'featured-placeholder',
+                              ),
+                              color: tomoCard,
+                              child: const Icon(
+                                Icons.menu_book_rounded,
+                                color: Colors.white24,
+                                size: 50,
+                              ),
+                            )
+                          : TomoNetworkImage(
+                              key: const ValueKey(
+                                'featured-cover',
+                              ),
+                              url: manga.cover,
+                              fit: BoxFit.cover,
+                              width: double.infinity,
+                              height: double.infinity,
+                              cacheWidth: 900,
+                            ),
+                ),
               ),
 
               Positioned.fill(

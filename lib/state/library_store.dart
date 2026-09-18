@@ -19,6 +19,8 @@ class LibraryStore extends ChangeNotifier {
   static const _lastPrefix = 'tomo_last_';
   static const _knownCountPrefix = 'tomo_known_count_';
   static const _openedPrefix = 'tomo_opened_';
+  static const _offsetPrefix = 'tomo_offset_';
+  static const _modePrefix = 'tomo_reader_mode_';
 
   final MangaService _mangaService;
 
@@ -189,6 +191,37 @@ class LibraryStore extends ChangeNotifier {
     await prefs.setInt('$_pagePrefix${mangaId}_$chapterId', page);
     await prefs.setString('$_lastPrefix$mangaId', chapterId);
     await prefs.setInt('$_openedPrefix$mangaId', DateTime.now().millisecondsSinceEpoch);
+  }
+
+  /// Cuánto se ha scrolleado dentro de la imagen actual, medido en
+  /// "pantallas" (unidades de viewport), no en píxeles.
+  /// Solo la usa el modo webtoon; el modo paged siempre la deja en 0.
+  Future<double> pageOffsetFor(String mangaId, String chapterId) async {
+    final prefs = await _preferences;
+    return prefs.getDouble('$_offsetPrefix${mangaId}_$chapterId') ?? 0;
+  }
+
+  Future<void> setPageOffset(
+    String mangaId,
+    String chapterId,
+    double offset,
+  ) async {
+    final prefs = await _preferences;
+    await prefs.setDouble(
+      '$_offsetPrefix${mangaId}_$chapterId',
+      offset < 0 ? 0 : offset,
+    );
+  }
+
+  /// 'paged' | 'webtoon' — se recuerda por manga.
+  Future<String> readerModeFor(String mangaId) async {
+    final prefs = await _preferences;
+    return prefs.getString('$_modePrefix$mangaId') ?? 'paged';
+  }
+
+  Future<void> setReaderMode(String mangaId, String mode) async {
+    final prefs = await _preferences;
+    await prefs.setString('$_modePrefix$mangaId', mode);
   }
 
   bool hasUpdate(String id) => updatedIds.contains(id);

@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
 import '../../core/weebcentral/constants.dart';
 import '../../models/manga/manga.dart';
@@ -40,6 +41,29 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
   late ChapterItem activeChapter;
   late final PageController pageController;
 
+  // --- Webtoon / stripe ---
+  late final ItemScrollController itemScrollController;
+  late final ItemPositionsListener itemPositionsListener;
+
+  /// 'paged' | 'webtoon'
+  String readerMode = 'paged';
+
+  /// Scroll dentro de la imagen actual, en unidades de viewport.
+  double currentOffset = 0;
+
+  /// Bloquea el guardado mientras restauramos la posición,
+  /// para que el listener no sobrescriba el progreso con 0.
+  bool _restoringWebtoon = false;
+
+  /// Evita marcar el capítulo como leído en cada tick del scroll.
+  bool _endMarked = false;
+
+  /// True cuando el último ítem ya se vio completo. Independiente
+  /// de currentPage (que a propósito sigue al ítem de ARRIBA, para
+  /// reanudar bien), así el botón "Next" no se queda atorado
+  /// mientras la penúltima imagen todavía asoma en pantalla.
+  bool atChapterEnd = false;
+
   Timer? _saveTimer;
   Timer? _hideTimer;
   bool progressLoading = true;
@@ -50,6 +74,12 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
 
     activeChapter = widget.chapter;
     pageController = PageController();
+
+    itemScrollController = ItemScrollController();
+    itemPositionsListener = ItemPositionsListener.create();
+    itemPositionsListener.itemPositions.addListener(
+      _onWebtoonPositionsChanged,
+    );
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -63,6 +93,9 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
   void dispose() {
     _saveTimer?.cancel();
     _hideTimer?.cancel();
+    itemPositionsListener.itemPositions.removeListener(
+      _onWebtoonPositionsChanged,
+    );
     pageController.dispose();
 
     SystemChrome.setEnabledSystemUIMode(
@@ -100,7 +133,14 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
   Future<void> _loadProgressAndChapter() async {
     final store = LibraryScope.read(context);
 
+    final mode = await store.readerModeFor(widget.manga.id);
+
     final savedPage = await store.pageFor(
+      widget.manga.id,
+      activeChapter.id,
+    );
+
+    final savedOffset = await store.pageOffsetFor(
       widget.manga.id,
       activeChapter.id,
     );
@@ -108,7 +148,12 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
     if (!mounted) return;
 
     setState(() {
+      readerMode = mode;
       currentPage = savedPage;
+      currentOffset = mode == 'webtoon' ? savedOffset : 0;
+      _restoringWebtoon = mode == 'webtoon';
+      _endMarked = false;
+      atChapterEnd = false;
       progressLoading = false;
     });
 
@@ -134,11 +179,133 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
 
     if (images.isEmpty || !mounted) return;
 
-    await LibraryScope.read(context).setPage(
+    // En webtoon nunca guardamos mientras restauramos o si la lista
+    // todavía no reporta posiciones: ahí currentPage vale 0 y
+    // borraría el progreso bueno.
+    if (readerMode == 'webtoon' &&
+        (_restoringWebtoon ||
+            itemPositionsListener.itemPositions.value.isEmpty)) {
+      return;
+    }
+
+    final store = LibraryScope.read(context);
+
+    await store.setPage(
       widget.manga.id,
       activeChapter.id,
       currentPage,
     );
+
+    await store.setPageOffset(
+      widget.manga.id,
+      activeChapter.id,
+      readerMode == 'webtoon' ? currentOffset : 0,
+    );
+  }
+
+  /// Traduce la posición del scroll a (índice de imagen + offset).
+  /// Nunca guardamos píxeles: al restaurar las imágenes aún no
+  /// midieron y el offset caería en otro lado.
+  void _onWebtoonPositionsChanged() {
+    if (!mounted ||
+        readerMode != 'webtoon' ||
+        images.isEmpty ||
+        _restoringWebtoon) {
+      return;
+    }
+
+    final positions =
+        itemPositionsListener.itemPositions.value;
+
+    if (positions.isEmpty) return;
+
+    final visible = positions
+        .where((position) => position.itemTrailingEdge > 0)
+        .toList()
+      ..sort((a, b) => a.index.compareTo(b.index));
+
+    if (visible.isEmpty) return;
+
+    final first = visible.first;
+    final last = visible.last;
+
+    // itemLeadingEdge viene en unidades de viewport y es justo lo
+    // que ItemScrollController.jumpTo espera como alignment.
+    final offset =
+        first.itemLeadingEdge < 0 ? -first.itemLeadingEdge : 0.0;
+
+    final reachedEnd = last.index == images.length - 1 &&
+        last.itemTrailingEdge <= 1.02;
+
+    final indexChanged = first.index != currentPage;
+    final offsetChanged =
+        (offset - currentOffset).abs() > 0.01;
+    final endChanged = reachedEnd != atChapterEnd;
+
+    if (indexChanged || offsetChanged || endChanged) {
+      setState(() {
+        currentPage = first.index;
+        currentOffset = offset;
+        atChapterEnd = reachedEnd;
+
+        if (reachedEnd) uiVisible = true;
+      });
+
+      if (indexChanged || offsetChanged) {
+        _scheduleSaveProgress();
+      }
+
+      if (indexChanged) {
+        _precacheNearbyPages(first.index);
+      }
+    }
+
+    if (reachedEnd && !_endMarked) {
+      _endMarked = true;
+      _hideTimer?.cancel();
+      _markChapterAsRead(activeChapter.id);
+    }
+  }
+
+  Future<void> _toggleReaderMode() async {
+    final next =
+        readerMode == 'webtoon' ? 'paged' : 'webtoon';
+
+    await _saveProgressNow();
+
+    if (!mounted) return;
+
+    // Los dos modos comparten el índice de imagen, así que
+    // cambiar de vista no pierde el lugar.
+    setState(() {
+      readerMode = next;
+      currentOffset = 0;
+      _restoringWebtoon = next == 'webtoon';
+    });
+
+    await LibraryScope.read(context).setReaderMode(
+      widget.manga.id,
+      next,
+    );
+
+    if (!mounted) return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+
+      if (next == 'webtoon') {
+        if (itemScrollController.isAttached) {
+          itemScrollController.jumpTo(
+            index: currentPage,
+            alignment: 0,
+          );
+        }
+
+        _restoringWebtoon = false;
+      } else if (pageController.hasClients) {
+        pageController.jumpToPage(currentPage);
+      }
+    });
   }
 
   Future<void> _markChapterAsRead(String chapterId) async {
@@ -195,11 +362,25 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
       });
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted || !pageController.hasClients) {
-          return;
+        if (!mounted) return;
+
+        if (readerMode == 'webtoon') {
+          // Anclamos al ítem, no al pixel: funciona aunque las
+          // imágenes todavía no hayan cargado.
+          if (itemScrollController.isAttached) {
+            itemScrollController.jumpTo(
+              index: safePage,
+              alignment: -currentOffset,
+            );
+          }
+
+          _restoringWebtoon = false;
+        } else {
+          if (!pageController.hasClients) return;
+
+          pageController.jumpToPage(safePage);
         }
 
-        pageController.jumpToPage(safePage);
         _precacheNearbyPages(safePage);
       });
     } catch (e) {
@@ -287,9 +468,20 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
       chapter.id,
     );
 
+    final savedOffset =
+        await LibraryScope.read(context).pageOffsetFor(
+      widget.manga.id,
+      chapter.id,
+    );
+
     setState(() {
       activeChapter = chapter;
       currentPage = savedPage;
+      currentOffset =
+          readerMode == 'webtoon' ? savedOffset : 0;
+      _restoringWebtoon = readerMode == 'webtoon';
+      _endMarked = false;
+      atChapterEnd = false;
       images = [];
       loading = true;
       error = null;
@@ -398,6 +590,19 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
                   ),
                 ],
               ),
+              actions: [
+                IconButton(
+                  onPressed: _toggleReaderMode,
+                  tooltip: readerMode == 'webtoon'
+                      ? 'Paged view'
+                      : 'Webtoon view',
+                  icon: Icon(
+                    readerMode == 'webtoon'
+                        ? Icons.auto_stories_outlined
+                        : Icons.view_day_outlined,
+                  ),
+                ),
+              ],
             )
           : null,
       body: progressLoading || loading
@@ -422,7 +627,60 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
                         ),
                       ),
                     )
-                  : Stack(
+                  : readerMode == 'webtoon'
+                      ? Stack(
+                          children: [
+                            GestureDetector(
+                              behavior: HitTestBehavior
+                                  .translucent,
+                              onTap: _toggleUi,
+                              child:
+                                  ScrollablePositionedList
+                                      .builder(
+                                itemCount: images.length,
+                                itemScrollController:
+                                    itemScrollController,
+                                itemPositionsListener:
+                                    itemPositionsListener,
+                                itemBuilder: (
+                                  context,
+                                  index,
+                                ) {
+                                  final cacheWidth =
+                                      (MediaQuery.sizeOf(
+                                                    context,
+                                                  ).width *
+                                              MediaQuery
+                                                  .devicePixelRatioOf(
+                                                context,
+                                              ) *
+                                              1.25)
+                                          .round();
+
+                                  return _ReaderImage(
+                                    source: images[index],
+                                    cacheWidth: cacheWidth,
+                                    webtoon: true,
+                                  );
+                                },
+                              ),
+                            ),
+                            if (uiVisible)
+                              Positioned(
+                                left: 16,
+                                right: 16,
+                                bottom: 24,
+                                child: _PagedFooter(
+                                  pageText:
+                                      'Page ${currentPage + 1} of ${images.length}',
+                                  showNext: atChapterEnd &&
+                                      _nextChapter != null,
+                                  onNext: _goToNextChapter,
+                                ),
+                              ),
+                          ],
+                        )
+                      : Stack(
                       children: [
                         PageView.builder(
                           controller: pageController,
@@ -438,6 +696,7 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
 
                             setState(() {
                               currentPage = index;
+                              currentOffset = 0;
 
                               if (reachedEnd) {
                                 uiVisible = true;
@@ -517,10 +776,12 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
 class _ReaderImage extends StatelessWidget {
   final String source;
   final int cacheWidth;
+  final bool webtoon;
 
   const _ReaderImage({
     required this.source,
     required this.cacheWidth,
+    this.webtoon = false,
   });
 
   bool get _isFile {
@@ -538,11 +799,28 @@ class _ReaderImage extends StatelessWidget {
       ),
     );
 
-    final loading = const Center(
-      child: CircularProgressIndicator(
-        color: tomoPink,
-      ),
-    );
+    // En webtoon el placeholder necesita altura propia: si el ítem
+    // mide 0 mientras carga, el índice visible se vuelve basura.
+    final loading = webtoon
+        ? const SizedBox(
+            height: 420,
+            child: Center(
+              child: CircularProgressIndicator(
+                color: tomoPink,
+              ),
+            ),
+          )
+        : const Center(
+            child: CircularProgressIndicator(
+              color: tomoPink,
+            ),
+          );
+
+    final fit = webtoon
+        ? BoxFit.fitWidth
+        : BoxFit.contain;
+
+    final height = webtoon ? null : double.infinity;
 
     if (_isFile) {
       final path = source.startsWith('file:')
@@ -551,9 +829,9 @@ class _ReaderImage extends StatelessWidget {
 
       return Image.file(
         File(path),
-        fit: BoxFit.contain,
+        fit: fit,
         width: double.infinity,
-        height: double.infinity,
+        height: height,
         cacheWidth: cacheWidth,
         filterQuality: FilterQuality.medium,
         gaplessPlayback: true,
@@ -563,9 +841,9 @@ class _ReaderImage extends StatelessWidget {
 
     return Image.network(
       source,
-      fit: BoxFit.contain,
+      fit: fit,
       width: double.infinity,
-      height: double.infinity,
+      height: height,
       cacheWidth: cacheWidth,
       filterQuality: FilterQuality.medium,
       gaplessPlayback: true,
